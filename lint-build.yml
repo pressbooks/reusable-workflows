@@ -1,0 +1,25 @@
+name: Lint and Build assets
+on:
+  workflow_call:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [ '18' ]
+    name: Node ${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.OS }}-build-${{ hashFiles('**/package-lock.json') }}
+      - name: Lint
+        run: npm ci && npm test
+      - name: Build assets
+        run: npm run build --if-present
