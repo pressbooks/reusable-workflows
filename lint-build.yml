@@ -1,6 +1,8 @@
 name: Lint and Build assets
 on:
-  workflow_call:
+  pull_request:
+    branches:
+      - dev
 jobs:
   build:
     runs-on: ubuntu-latest
