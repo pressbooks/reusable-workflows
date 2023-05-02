@@ -1,0 +1,24 @@
+name: 'Lint pull request title and branch name'
+on: 
+  pull_request
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  branch-naming-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: deepakputhraya/action-branch-name@master
+        with:
+          regex: '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)\/[a-z0-9]+(-[a-z0-9]+)*'
+          allowed_prefixes: 'feat,fix,chore,docs'
+          ignore: production,staging,dev
+          min_length: 5
+          max_length: 20
+      - uses: morrisoncole/pr-lint-action@v1.7.0
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          title-regex: "^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z\-]+\))?!?: .{1,72}$"
+          on-failed-regex-fail-action: true
+          on-failed-regex-request-changes: true
+          on-failed-regex-comment:
+            "Your pull request title should follow the conventional commit pattern: `%regex%`!"
