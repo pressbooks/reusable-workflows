@@ -14,7 +14,7 @@ jobs:
           regex: '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test|dependabot)\/[a-z0-9-_.\/]+?$'
           ignore: production,staging,dev
           min_length: 5
-          max_length: 50
+          max_length: 100
       - name: Lint pull request title
         uses: morrisoncole/pr-lint-action@v1.7.0
         with:
