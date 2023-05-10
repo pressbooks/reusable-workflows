@@ -11,7 +11,7 @@ jobs:
       - name: Check branch naming rules
         uses: deepakputhraya/action-branch-name@master
         with:
-          regex: '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test|dependabot)\/[a-z0-9\/]+(-[a-z0-9]+)*$'
+          regex: '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test|dependabot)\/[a-z0-9-_\/]+?$'
           ignore: production,staging,dev
           min_length: 5
           max_length: 50
