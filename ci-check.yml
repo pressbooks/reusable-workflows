@@ -19,7 +19,7 @@ jobs:
         uses: morrisoncole/pr-lint-action@v1.7.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          title-regex: '^(build|chore|ci|docs|feat|fix|perf|refactor|release|revert|style|test)\((.*?)\)!?: .{1,140}$'
+          title-regex: '^(build|chore|ci|docs|feat|fix|perf|refactor|release|revert|style|test)(\((.*?)\))?: .{1,140}$'
           on-failed-regex-fail-action: true
           on-failed-regex-request-changes: true
           on-failed-regex-comment: |
