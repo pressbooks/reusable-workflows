@@ -1,8 +1,6 @@
 ## Reusable/Required workflows for Pressbooks
 
-This repository contains reusable workflows that can used on any Pressbooks repository to reduce code duplication on our automation efforts.
-
-The most outstanding benefit of required workflows is that we don't need to push any code change in our repos anymore, we can build standarized steps in one place.
+This repository contains reusable workflows that can be used on any Pressbooks repository to reduce code duplication and maintanance across several repos which use similar automation as part of our CI/CD processes. With centralized workflows, we can update a specific action or workflow in one place and run it everywhere, instead of having to push identical changes to every repo that uses the action.
 
 ### Workflows list
 
@@ -10,11 +8,18 @@ The most outstanding benefit of required workflows is that we don't need to push
 
 This workflow is used to lint and build frontend assets, this way everytime a PR is opened we ensure the contributions follows our code style guidelines and the js build still works.
 
+* ci-check.yml
+
+This workflow checks to see the pull request titles follow the expected conventions used by Pressbooks (conventional commit prefixes)
+
+* update-mo.yml
+
+This workflow automatically generates and commits machine-readable translation files to any PR branches which update the .po files in that repository.
 
 ### How to use a required workflow
 
 1. Create a workflow in this repo
-2. Register the required workflow in Github (organization settings)
+2. Register the required workflow in GitHub (organization settings)
 3. Attach the workflow to the repos where it should run (organization settings).
 4. Enjoy your new workflow.
 
@@ -30,7 +35,7 @@ Note the following restrictions and behaviors for the source repository and work
 
 * CodeQL is not supported in required workflows because CodeQL requires configuration at the repository level. For information on configuring code scanning, see "Configuring code scanning for a repository."
 
-### Further read
+### Further reading
 
 https://docs.github.com/en/actions/using-workflows/required-workflows
 
