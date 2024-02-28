@@ -1,10 +1,6 @@
 name: Update Machine Readable Translation Files
 
-on:
-  pull_request:
-    paths:
-      - 'languages/*.po'
-  workflow_dispatch:
+on: workflow_call
 
 jobs:
   update-mo-files:
