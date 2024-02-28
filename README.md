@@ -1,12 +1,12 @@
-## Reusable/Required workflows for Pressbooks
+## Reusable workflows for Pressbooks
 
-This repository contains reusable workflows that can be used on any Pressbooks repository to reduce code duplication and maintanance across several repos which use similar automation as part of our CI/CD processes. With centralized workflows, we can update a specific action or workflow in one place and run it everywhere, instead of having to push identical changes to every repo that uses the action.
+This repository contains reusable workflows that can be used on any Pressbooks repository to reduce code duplication and maintenance across several repos which use similar automation as part of our CI/CD processes. With centralized workflows, we can update a specific action or workflow in one place and run it everywhere, instead of having to push identical changes to every repo that uses the action.
 
 ### Workflows list
 
 * lint-build.yml
 
-This workflow is used to lint and build frontend assets, this way everytime a PR is opened we ensure the contributions follows our code style guidelines and the js build still works.
+This workflow is used to lint and build frontend assets. Each time a PR is opened we can ensure that contributions follow our code style guidelines and the build step works as expected.
 
 * ci-check.yml
 
@@ -14,7 +14,7 @@ This workflow checks to see the pull request titles follow the expected conventi
 
 * update-mo.yml
 
-This workflow automatically generates and commits machine-readable translation files to any PR branches which update the .po files in that repository.
+This reusable workflow automatically generates and commits machine-readable translation files to any PR branches which update the .po files in that repository.
 
 ### How to use a required workflow
 
