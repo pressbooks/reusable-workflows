@@ -3,7 +3,7 @@ name: 🤖 Prepare for Release 🚀
 on:
   workflow_call:
     secrets:
-      github_token:
+      ga_token:
         required: true
 
 jobs:
