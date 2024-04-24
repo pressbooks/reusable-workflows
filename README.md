@@ -16,6 +16,10 @@ This workflow checks to see the pull request titles follow the expected conventi
 
 This reusable workflow automatically generates and commits machine-readable translation files to any PR branches which update the .po files in that repository.
 
+* prepare-release.yml
+
+This reusable workflow would open Release Candidate PRs and bump versions on required files defined inside (release-please-config.json) in each repo, this also will tag and release a new version with an artifact attached when the pull request gets merged.
+
 ### How to use a required workflow
 
 1. Create a workflow in this repo
