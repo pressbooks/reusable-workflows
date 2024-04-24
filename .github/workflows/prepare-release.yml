@@ -2,11 +2,9 @@ name: 🤖 Prepare for Release 🚀
 
 on:
   workflow_call:
-    inputs:
-      github_token:
-        description: 'GitHub Token for operations'
+    secrets:
+      token:
         required: true
-        type: secret
 
 jobs:
   release-please:
