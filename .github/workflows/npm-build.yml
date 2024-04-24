@@ -36,7 +36,7 @@ jobs:
       - name: Build assets
         run: npm run build --if-present
 
-      - name: Commit and push build assets
+      - name: Commit and push built assets
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
