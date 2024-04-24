@@ -1,0 +1,45 @@
+name: Build npm
+
+on: workflow_call
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['18']
+    name: Node ${{ matrix.node }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Necessary to fetch all history for branch and tags
+          ref: ${{ github.head_ref }}  # Checkout the head of the PR
+
+      - name: Setup node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.OS }}-build-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm test
+
+      - name: Build assets
+        run: npm run build --if-present
+
+      - name: Commit and push build assets
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add -A
+          git commit -m "build: npm build" -a
+          git push origin ${{ github.head_ref }}
