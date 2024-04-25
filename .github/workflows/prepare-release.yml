@@ -42,3 +42,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ga_token }}
         run: gh release upload ${{ steps.release.outputs.tag_name }} ${{github.workspace}}/$GITHUB_REPO_SLUG-$GITHUB_TAG.zip --clobber
+      - name: Update production branch
+        if: ${{ steps.release.outputs.release_created }}
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: "after-release.yml"
+          token: ${{ secrets.ga_token }}
+          inputs: '{"ga_token": "${{ secrets.ga_token }}"}'
