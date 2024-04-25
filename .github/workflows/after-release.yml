@@ -25,6 +25,7 @@ jobs:
       - name: Merge specified branch into main
         run: |
           git checkout production
+          git pull origin production
           git merge --ff-only dev
           git push origin production
         env:
