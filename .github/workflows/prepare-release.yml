@@ -42,19 +42,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ga_token }}
         run: gh release upload ${{ steps.release.outputs.tag_name }} ${{github.workspace}}/$GITHUB_REPO_SLUG-$GITHUB_TAG.zip --clobber
-      - name: Check if workflow file exists
-        if: ${{ steps.release.outputs.release_created }}
-        id: checkfile
-        run: |
-          echo "Checking for the file..."
-          if [ -f .github/workflows/after-release.yml ]; then
-            echo "exists=true" >> $GITHUB_ENV
-          else
-            echo "exists=false" >> $GITHUB_ENV
-          fi
-      - name: Update production branch
-        if: ${{ steps.release.outputs.release_created }} && ${{ env.exists == 'true' }}
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: "after-release.yml"
-          token: ${{ secrets.ga_token }}
