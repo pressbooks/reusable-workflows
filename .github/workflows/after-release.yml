@@ -1,6 +1,7 @@
 name: Merge dev into production after release
 
 on:
+  workflow_dispatch:
   workflow_call:
     secrets:
       ga_token:
