@@ -25,7 +25,7 @@ jobs:
       - name: Merge specified branch into main
         run: |
           git checkout production
-          git merge --ff-only
+          git merge --ff-only dev
           git push origin production
         env:
           GITHUB_TOKEN: ${{ secrets.ga_token }}
