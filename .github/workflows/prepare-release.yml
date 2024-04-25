@@ -48,4 +48,3 @@ jobs:
         with:
           workflow: "after-release.yml"
           token: ${{ secrets.ga_token }}
-          inputs: '{"ga_token": "${{ secrets.ga_token }}"}'
