@@ -8,7 +8,7 @@ on:
         required: true
 
 jobs:
-  fast-forward-merge:
+  rebase-production:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -22,11 +22,15 @@ jobs:
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Merge specified branch into main
+      - name: Rebase production on dev
         run: |
           git checkout production
-          git pull origin production
-          git merge --ff-only dev
-          git push origin production
+          git rebase dev --strategy-option=theirs
+        env:
+          GITHUB_TOKEN: ${{ secrets.ga_token }}
+
+      - name: Push changes
+        run: |
+          git push origin production --force
         env:
           GITHUB_TOKEN: ${{ secrets.ga_token }}
