@@ -4,10 +4,12 @@ on:
   workflow_call:
     inputs:
       packages:
+        type: string
         description: 'List of space seperated packages to be update. The packages can include a specific reference (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)'
   workflow_dispatch:
     inputs:
       packages:
+        type: string
         description: 'List of space seperated packages to be update. The packages can include a specific reference (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)'
 jobs:
   test:
