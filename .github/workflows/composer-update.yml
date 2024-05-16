@@ -37,29 +37,29 @@ jobs:
           git checkout -b "dev-updated"
       - name: Update packages
         run: |
-          composer_info="$(composer info -D -N)"
-          counter_packages_updated=0
-          IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
-          for package in "${packages[@]}"; do
-          if [[ ! $composer_info =~ "${package%%:*}" ]]; then
-            echo "$package is not installed."
-          else
-            if [[ "$package" != .*/.*:.* ]]; then
-              composer update $package
-            else
-              composer remove --no-update $package
-              composer require --no-update $package
-            fi
-            if git diff --quiet; then
-                echo "No changes to commit."
-              else
-                git add .
-                git commit -m "Chore: upgrading $package"
-                counter_packages_updated=$((counter_packages_updated + 1))
-                echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
-              fi
-            fi
-          done
+               composer_info="$(composer info -D -N)"
+               counter_packages_updated=0
+               IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
+               for package in "${packages[@]}"; do
+               if [[ ! $composer_info =~ ${package%%:*} ]]; then
+                echo "$package is not installed."
+               else
+          #              if [[ "$package" != *:* ]]; then
+               composer update "$package"
+          #              else
+          #                composer remove --no-update "$package"
+          #                composer require --no-update "$package"
+          #              fi
+               if git diff --quiet; then
+               echo "No changes to commit."
+               else
+               git add .
+               git commit -m "Chore: upgrading $package"
+               counter_packages_updated=$((counter_packages_updated + 1))
+               echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
+               fi
+               fi
+               done
       - name: Push changes and create pull request
         run: |
           if [ "$COUNTER_PACKAGES_UPDATED" -gt 0 ]; then
