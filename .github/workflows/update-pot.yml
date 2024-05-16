@@ -46,6 +46,7 @@ jobs:
 
       - name: Commit and push .pot file
         run: |
+          git checkout -b ${{ github.head_ref }}
           git add -A
           git commit -m "chore(l10n): update pot file"
           git push origin ${{ github.head_ref }}
