@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: google-github-actions/release-please-action@v4
+      - uses: googleapis/release-please-action@v4
         id: release
         with:
           token: ${{ secrets.ga_token }}
@@ -44,7 +44,7 @@ jobs:
         run: gh release upload ${{ steps.release.outputs.tag_name }} ${{github.workspace}}/$GITHUB_REPO_SLUG-$GITHUB_TAG.zip --clobber
       - name: Trigger staging bedrock updates
         if: ${{ steps.release.outputs.release_created }}
-        uses: pressbooks/composer-autoupdate-bedrock@feat/add-tag-in-sns-message
+        uses: pressbooks/composer-autoupdate-bedrock@chore/add-tag-in-sns-message
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
