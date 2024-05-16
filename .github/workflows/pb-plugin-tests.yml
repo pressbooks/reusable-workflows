@@ -7,14 +7,17 @@ on:
         description: 'Use Maria DB'
         type: boolean
         required: false
+        default: false
     requires_pressbooks:
       description: 'Require Pressbooks'
       type: boolean
       required: false
+      default: false
     requires_private_repo:
       description: 'Require private repo'
       type: string
       required: false
+      default: ''
 
 jobs:
   tests:
@@ -89,7 +92,7 @@ jobs:
           cd ../$REPO_NAME
 
       - name: Require Private Repo
-        if: ${{ github.event.inputs.requires_private_repo }}
+        if: ${{ github.event.inputs.requires_private_repo != ''}}
         run: |
           git clone --depth=1 https://x-access-token:${{secrets.PAT_FOR_GITHUB_ACTIONS}}@github.com/pressbooks/${{ github.event.inputs.requires_private_repo }}.git ../${{ github.event.inputs.requires_private_repo }}
           cd ../${{ github.event.inputs.requires_private_repo }} && composer install --no-dev
