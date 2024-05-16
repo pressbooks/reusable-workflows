@@ -1,4 +1,4 @@
-name: Update Machine Readable Translation Files
+name: Update MO Files 🌐
 
 on: workflow_call
 

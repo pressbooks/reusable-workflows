@@ -1,4 +1,4 @@
-name: Update POT file
+name: Update POT file 🌐
 
 on:
   workflow_call:
@@ -24,14 +24,18 @@ jobs:
   update-pot:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
-      - name: Setup PHP
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
-          tools: composer, wp-cli/wp-cli-bundle
+          tools: wp-cli/wp-cli-bundle
+
       - name: Update POT file
         run: wp i18n make-pot . languages/${{ github.event.repository.name }}.pot --domain=${{ inputs.domain }} --slug=${{ inputs.slug }} --package-name="${{ inputs.package_name }}" --headers='${{ inputs.headers }}'
 
