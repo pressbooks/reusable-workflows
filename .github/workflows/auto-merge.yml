@@ -77,7 +77,7 @@ jobs:
                     owner: context.payload.repository.owner.login,
                     repo: context.payload.repository.name,
                     pull_number: context.payload.pull_request.number,
-                    merge_method: 'squash'
+                    merge_method: 'squash',
                     commit_title: context.payload.pull_request.title
                   })
                 }
