@@ -8,16 +8,16 @@ on:
         type: boolean
         required: false
         default: false
-    requires_pressbooks:
-      description: 'Require Pressbooks'
-      type: boolean
-      required: false
-      default: false
-    requires_private_repo:
-      description: 'Require private repo'
-      type: string
-      required: false
-      default: ''
+      requires_pressbooks:
+        description: 'Require Pressbooks'
+        type: boolean
+        required: false
+        default: false
+      requires_private_repo:
+        description: 'Require private repo'
+        type: string
+        required: false
+        default: ''
 
 jobs:
   tests:
