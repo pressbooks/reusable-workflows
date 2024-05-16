@@ -9,10 +9,7 @@ identical changes to every repo that uses the action.
 
 * update-pot.yml
 
-This reusable workflow automatically generates and commits a new .pot file to any PR branches which update the .php
-files
-
-* update-mo.yml
+This reusable workflow automatically generates and commits a new .pot file to any PR branches.
 
 This reusable workflow automatically generates and commits machine-readable translation files to any PR branches which
 update the .po files in that repository.
