@@ -41,7 +41,7 @@ jobs:
           IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
           for package in "${packages[@]}"; do
             if [[ "$package" != *:* ]]; then
-               composer update "$package" --with-dependencies
+               composer update "$package" --with-all-dependencies
             else
               composer require "$package" --sort-packages
               if git diff --quiet; then
