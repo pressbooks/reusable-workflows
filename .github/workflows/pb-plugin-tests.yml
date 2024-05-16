@@ -54,12 +54,6 @@ jobs:
           coverage: pcov
           extensions: imagick
 
-      - name: Check Inputs
-        run: |
-          echo "Requires Pressbooks: ${{ inputs.requires_pressbooks }}"
-          echo "Requires MariaDB: ${{ inputs.use_mariadb }}"
-          echo "Requires Private Repo: ${{ inputs.requires_private_repo }}"
-
       - name: Install PHP dependencies
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{secrets.PAT_FOR_GITHUB_ACTIONS}}"} }'
