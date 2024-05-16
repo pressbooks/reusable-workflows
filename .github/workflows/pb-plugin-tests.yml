@@ -86,7 +86,7 @@ jobs:
         run: sudo systemctl start mysql.service && mysql --version
 
       - name: Require Pressbooks
-        if: ${{ github.event.inputs.requires_pressbooks }}
+        if: ${{ github.event.inputs.requires_pressbooks == true }}
         run: |
           git clone --depth=1 https://github.com/pressbooks/pressbooks.git ../pressbooks
           cd ../pressbooks && composer install --no-dev
