@@ -1,0 +1,46 @@
+name: Update POT file
+
+on:
+  workflow_call:
+    inputs:
+      domain:
+        type: string
+        description: 'Text domain for the POT file'
+        required: true
+      slug:
+        type: string
+        description: 'Project slug'
+        required: true
+      package_name:
+        type: string
+        description: 'Package name for the header in the POT file'
+        required: true
+      headers:
+        type: string
+        description: 'Additional headers in JSON format'
+        required: true
+
+jobs:
+  update-pot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: composer, wp-cli/wp-cli-bundle
+      - name: Update POT file
+        run: wp i18n make-pot . languages/${{ github.event.repository.name }}.pot --domain=${{ inputs.domain }} --slug=${{ inputs.slug }} --package-name="${{ inputs.package_name }}" --headers='${{ inputs.headers }}'
+      - name: Create Pull Request for POT file
+        id: cprpot
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+          labels: automerge-pot
+          commit-message: 'chore(l10n): update pot file'
+          title: 'chore(l10n): update pot file'
+          body: 'Update the POT file for this plugin.'
+          branch: chore/update-pot-file
