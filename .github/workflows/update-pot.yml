@@ -34,13 +34,14 @@ jobs:
           tools: composer, wp-cli/wp-cli-bundle
       - name: Update POT file
         run: wp i18n make-pot . languages/${{ github.event.repository.name }}.pot --domain=${{ inputs.domain }} --slug=${{ inputs.slug }} --package-name="${{ inputs.package_name }}" --headers='${{ inputs.headers }}'
-      - name: Create Pull Request for POT file
-        id: cprpot
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
-          labels: automerge-pot
-          commit-message: 'chore(l10n): update pot file'
-          title: 'chore(l10n): update pot file'
-          body: 'Update the POT file for this plugin.'
-          branch: chore/update-pot-file
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Commit and push .pot file
+        run: |
+          git add -A
+          git commit -m "chore(l10n): update pot file"
+          git push origin ${{ github.head_ref }}
