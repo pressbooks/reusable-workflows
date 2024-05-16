@@ -1,4 +1,4 @@
-name: Auto merge workflow 🤖
+name: Auto merge 🤖
 on:
   workflow_call:
     inputs:
@@ -8,7 +8,7 @@ on:
         default: '^(chore(l10n|i18n)?: update languages|^chore: Composer update with)'
 
 jobs:
-  automerge:
+  workflow:
     runs-on: ubuntu-latest
     steps:
       - name: Check Pull Request Title
