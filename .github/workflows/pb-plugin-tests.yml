@@ -56,9 +56,9 @@ jobs:
 
       - name: Check Inputs
         run: |
-          echo "Requires Pressbooks: ${{ github.event.inputs.requires_pressbooks }}"
-          echo "Requires Pressbooks: ${{ github.event.inputs.use_mariadb }}"
-          echo "Requires Pressbooks: ${{ github.event.inputs.requires_private_repo }}"
+          echo "Requires Pressbooks: ${{ inputs.requires_pressbooks }}"
+          echo "Requires MariaDB: ${{ inputs.use_mariadb }}"
+          echo "Requires Private Repo: ${{ inputs.requires_private_repo }}"
 
       - name: Install PHP dependencies
         env:
@@ -72,15 +72,15 @@ jobs:
         run: composer standards
 
       - name: Remove MySQL
-        if: github.event.inputs.use_mariadb == true
+        if: inputs.use_mariadb == true
         run: sudo apt remove mysql-server-8.0 mysql-common
 
       - name: Update apt
-        if: github.event.inputs.use_mariadb == true
+        if: inputs.use_mariadb == true
         run: sudo apt-get update
 
       - name: Install MariaDB
-        if: github.event.inputs.use_mariadb == true
+        if: inputs.use_mariadb == true
         run: |
           sudo apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xF1656F24C74CD1D8
           echo "deb http://downloads.mariadb.com/MariaDB/mariadb-10.5/repo/ubuntu focal main" | sudo tee /etc/apt/sources.list.d/mariadb.list
@@ -92,17 +92,17 @@ jobs:
         run: sudo systemctl start mysql.service && mysql --version
 
       - name: Require Pressbooks
-        if: github.event.inputs.requires_pressbooks == true
+        if: inputs.requires_pressbooks == true
         run: |
           git clone --depth=1 https://github.com/pressbooks/pressbooks.git ../pressbooks
           cd ../pressbooks && composer install --no-dev
           cd ../$REPO_NAME
 
       - name: Require Private Repo
-        if: github.event.inputs.requires_private_repo != ''
+        if: inputs.requires_private_repo != ''
         run: |
-          git clone --depth=1 https://x-access-token:${{secrets.PAT_FOR_GITHUB_ACTIONS}}@github.com/pressbooks/${{ github.event.inputs.requires_private_repo }}.git ../${{ github.event.inputs.requires_private_repo }}
-          cd ../${{ github.event.inputs.requires_private_repo }} && composer install --no-dev
+          git clone --depth=1 https://x-access-token:${{secrets.PAT_FOR_GITHUB_ACTIONS}}@github.com/pressbooks/${{ inputs.requires_private_repo }}.git ../${{ inputs.requires_private_repo }}
+          cd ../${{ inputs.requires_private_repo }} && composer install --no-dev
           cd ../$REPO_NAME
 
       - name: Install WP tests
