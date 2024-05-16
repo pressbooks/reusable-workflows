@@ -21,7 +21,7 @@ on:
 
 jobs:
   tests:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-20.04
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
