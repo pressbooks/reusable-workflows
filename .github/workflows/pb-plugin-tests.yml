@@ -82,6 +82,9 @@ jobs:
           sudo apt-get install mariadb-server-10.5 mariadb-client-10.5
           sudo mysqladmin -p'' password 'root'
 
+      - name: Start Database
+        run: sudo systemctl start mysql.service && mysql --version
+
       - name: Require Pressbooks
         if: ${{ github.event.inputs.requires_pressbooks }}
         run: |
