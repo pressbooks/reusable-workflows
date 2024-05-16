@@ -40,7 +40,10 @@ jobs:
           counter_packages_updated=0
           IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
           for package in "${packages[@]}"; do
-              composer require "$package"
+            if [[ "$package" != *:* ]]; then
+               composer update "$package" --with-dependencies
+            else
+              composer require "$package" --sort-packages
               if git diff --quiet; then
                echo "No changes to commit."
               else
@@ -49,6 +52,7 @@ jobs:
                 counter_packages_updated=$((counter_packages_updated + 1))
                 echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
               fi
+            fi
           done
       - name: Push changes and create pull request
         run: |
