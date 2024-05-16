@@ -64,7 +64,6 @@ jobs:
 
       - name: Check Standards
         run: composer standards
-        if: matrix.experimental == false
 
       - name: Remove MySQL
         if: ${{ github.event.inputs.use_mariadb == true }}
