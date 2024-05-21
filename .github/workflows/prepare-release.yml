@@ -2,9 +2,6 @@ name: 🤖 Release Process 🚀
 
 on:
   workflow_call:
-    secrets:
-      ga_token:
-        required: true
 
 jobs:
   release-please:
@@ -14,7 +11,7 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          token: ${{ secrets.ga_token }}
+          token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
       - name: Set Environment Variables
         if: ${{ steps.release.outputs.release_created }}
         run: |
@@ -40,7 +37,7 @@ jobs:
       - name: Upload release artifact
         if: ${{ steps.release.outputs.release_created }}
         env:
-          GITHUB_TOKEN: ${{ secrets.ga_token }}
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
         run: gh release upload ${{ steps.release.outputs.tag_name }} ${{github.workspace}}/$GITHUB_REPO_SLUG-$GITHUB_TAG.zip --clobber
       - name: Trigger staging bedrock updates
         if: ${{ steps.release.outputs.release_created }}
