@@ -42,7 +42,7 @@ jobs:
                 // Filter out checks that are not completed and not the current check
                 const checks = response.data.check_runs.filter(check => {
                   console.log(check.name);
-                  return check.status !== 'completed' && !check.name.contains('merge');
+                  return check.status !== 'completed' && !check.name.contains('automerge');
                 });
 
                 if (checks.length === 0) {
