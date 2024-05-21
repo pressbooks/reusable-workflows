@@ -39,10 +39,10 @@ jobs:
                   repo: context.payload.repository.name,
                   ref: context.payload.pull_request.head.ref
                 });
-                console.log(check.name);
                 // Filter out checks that are not completed and not the current check
                 const checks = response.data.check_runs.filter(check => {
-                  return check.status !== 'completed' && check.name !== 'Automerge ✨ / Auto merge 🤖';
+                  console.log(check.name);
+                  return check.status !== 'completed' && !check.name.contains('merge');
                 });
 
                 if (checks.length === 0) {
