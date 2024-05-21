@@ -29,6 +29,7 @@ jobs:
       - name: Install PHP dependencies
         run: |
           export PATH="$HOME/.composer/vendor/bin:$PATH"
+          composer config --auth http-basic.objectcache.pro token "${{ secrets.OBJECT_CACHE_PRO_TOKEN }}";
           composer install --no-interaction
       - name: Setup github config and create new branch
         run: |
