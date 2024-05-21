@@ -42,6 +42,7 @@ jobs:
           for package in "${packages[@]}"; do
             if [[ "$package" != *:* ]]; then
                composer update "$package" --with-all-dependencies
+               counter_packages_updated=$((counter_packages_updated + 1))
             else
               composer require "$package" --sort-packages
               if git diff --quiet; then
@@ -50,13 +51,14 @@ jobs:
                 git add .
                 git commit -m "Chore: upgrading $package"
                 counter_packages_updated=$((counter_packages_updated + 1))
-                echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
               fi
             fi
           done
+          echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
       - name: Push changes and create pull request
         run: |
-          if [ "$COUNTER_PACKAGES_UPDATED" -gt 0 ]; then
+          echo "COUNTER_PACKAGES_UPDATED=${COUNTER_PACKAGES_UPDATED:-0}" >> $GITHUB_ENV
+          if [ "${COUNTER_PACKAGES_UPDATED:-0}" -gt 0 ]; then
             git push -u origin dev-updated
             current_date=$(date +%Y-%m-%d)
             gh pr create --base dev --head dev-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body ""
