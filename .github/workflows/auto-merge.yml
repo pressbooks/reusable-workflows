@@ -21,31 +21,42 @@ jobs:
 
       - name: Wait for checks to complete
         if: steps.title-check.outputs.shouldMerge == 'true'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{secrets.PAT_FOR_GITHUB_ACTIONS}}
         with:
           result-encoding: string
           script: |
             const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const MAX_ATTEMPTS = 30; // Maximum number of attempts to poll the API
 
             async function waitForChecks() {
-              while (true) {
+              let attempts = 0; // Counter for the number of attempts
+
+              while (attempts < MAX_ATTEMPTS) {
                 const response = await github.rest.checks.listForRef({
                   owner: context.payload.repository.owner.login,
                   repo: context.payload.repository.name,
                   ref: context.payload.pull_request.head.ref
                 });
+                console.log(check.name);
                 // Filter out checks that are not completed and not the current check
                 const checks = response.data.check_runs.filter(check => {
-            return check.status !== 'completed' && check.name !== 'automerge / automerge';
-            });
+                  return check.status !== 'completed' && check.name !== 'Automerge ✨ / Auto merge 🤖';
+                });
+
                 if (checks.length === 0) {
                   console.log('All checks completed.');
                   break;
                 }
+
                 console.log('Waiting for checks to complete...');
                 await wait(10000); // Wait for 10 seconds
+                attempts++; // Increment the counter
+              }
+
+              if (attempts === MAX_ATTEMPTS) {
+                console.log('Reached maximum number of attempts. Stopping...');
               }
             }
 
@@ -54,7 +65,7 @@ jobs:
 
       - name: Merge Composer auto update PRs
         if: steps.title-check.outputs.shouldMerge == 'true'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{secrets.PAT_FOR_GITHUB_ACTIONS}}
         with:
