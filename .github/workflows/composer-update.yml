@@ -35,7 +35,7 @@ jobs:
         run: |
           git config --global user.email "ops@pressbooks.com"
           git config --global user.name "pressbooks-ops"
-          git checkout -b "{$GITHUB_REF_NAME}-updated"
+          git checkout -b "${GITHUB_REF_NAME}-updated"
       - name: Update packages
         run: |
           counter_packages_updated=0
@@ -59,9 +59,9 @@ jobs:
         run: |
           echo "COUNTER_PACKAGES_UPDATED=${COUNTER_PACKAGES_UPDATED:-0}" >> $GITHUB_ENV
           if [ "${COUNTER_PACKAGES_UPDATED:-0}" -gt 0 ]; then
-            git push -u origin "{$GITHUB_REF_NAME}-updated"
+            git push -u origin "${GITHUB_REF_NAME}-updated"
             current_date=$(date +%Y-%m-%d)
-            gh pr create --base "{$GITHUB_REF_NAME}" --head "{$GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body ""
+            gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body ""
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
