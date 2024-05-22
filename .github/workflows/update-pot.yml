@@ -50,7 +50,7 @@ jobs:
             const labels = pr.data.labels.map(label => label.name).join(',');
             core.setOutput('labels', labels);
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
 
       - name: Check if PR is a release PR
         id: skip_if_autorelease
