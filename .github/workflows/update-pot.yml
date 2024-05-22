@@ -35,7 +35,7 @@ jobs:
 
       - name: Get pull request labels
         id: get_pr_labels
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const pr = await github.rest.pulls.get({
@@ -47,7 +47,10 @@ jobs:
             console.log('Pull request labels:', labels);
             core.setOutput('labels', labels);
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+
+      - name: Debug labels
+        run: echo "${{ steps.get_pr_labels.outputs.labels }}"
 
       - name: Set up PHP
         if: contains(steps.get_pr_labels.outputs.labels, 'autorelease')
