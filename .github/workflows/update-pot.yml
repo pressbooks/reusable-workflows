@@ -19,6 +19,10 @@ on:
         type: string
         description: 'Additional headers in JSON format'
         required: true
+      pull_request_number:
+        type: number
+        description: 'Pull request number'
+        required: true
 
 jobs:
   update-pot:
@@ -37,7 +41,7 @@ jobs:
             const pr = await github.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number
+              pull_number: ${{ inputs.pull_request_number }}
             });
             const labels = pr.data.labels.map(label => label.name).join(',');
             core.setOutput('labels', labels);
