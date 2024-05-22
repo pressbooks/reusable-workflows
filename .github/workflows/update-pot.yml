@@ -49,9 +49,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
 
-      - name: Debug labels
-        run: echo "${{ steps.get_pr_labels.outputs.labels }}"
-
       - name: Set up PHP
         if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
         uses: shivammathur/setup-php@v2
