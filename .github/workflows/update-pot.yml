@@ -38,11 +38,7 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const { getOctokit, context } = require('@actions/github');
-            const core = require('@actions/core');
-            const token = core.getInput('GITHUB_TOKEN');
-            const octokit = getOctokit(token);
-            const pr = await octokit.pulls.get({
+            const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: ${{ inputs.pull_request_number }}
@@ -50,7 +46,7 @@ jobs:
             const labels = pr.data.labels.map(label => label.name).join(',');
             core.setOutput('labels', labels);
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if PR is a release PR
         id: skip_if_autorelease
