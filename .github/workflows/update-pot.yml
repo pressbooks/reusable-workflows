@@ -1,0 +1,52 @@
+name: Update POT file 🌐
+
+on:
+  workflow_call:
+    inputs:
+      domain:
+        type: string
+        description: 'Text domain for the POT file'
+        required: true
+      slug:
+        type: string
+        description: 'Project slug'
+        required: true
+      package_name:
+        type: string
+        description: 'Package name for the header in the POT file'
+        required: true
+      headers:
+        type: string
+        description: 'Additional headers in JSON format'
+        required: true
+
+jobs:
+  update-pot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: wp-cli/wp-cli-bundle
+
+      - name: Update POT file
+        run: wp i18n make-pot . languages/${{ github.event.repository.name }}.pot --domain=${{ inputs.domain }} --slug=${{ inputs.slug }} --package-name="${{ inputs.package_name }}" --headers='${{ inputs.headers }}'
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Commit and push .pot file
+        run: |
+          git checkout ${{ github.head_ref }}
+          git add -A
+          git commit -m "chore(l10n): update pot file"
+          git push origin ${{ github.head_ref }}

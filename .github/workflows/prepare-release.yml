@@ -1,20 +1,17 @@
-name: 🤖 Prepare for Release 🚀
+name: 🤖 Release Process 🚀
 
 on:
   workflow_call:
-    secrets:
-      ga_token:
-        required: true
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: google-github-actions/release-please-action@v4
+      - uses: actions/checkout@v4
+      - uses: googleapis/release-please-action@v4
         id: release
         with:
-          token: ${{ secrets.ga_token }}
+          token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
       - name: Set Environment Variables
         if: ${{ steps.release.outputs.release_created }}
         run: |
@@ -40,5 +37,15 @@ jobs:
       - name: Upload release artifact
         if: ${{ steps.release.outputs.release_created }}
         env:
-          GITHUB_TOKEN: ${{ secrets.ga_token }}
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
         run: gh release upload ${{ steps.release.outputs.tag_name }} ${{github.workspace}}/$GITHUB_REPO_SLUG-$GITHUB_TAG.zip --clobber
+      - name: Trigger staging bedrock updates
+        if: ${{ steps.release.outputs.release_created }}
+        uses: pressbooks/composer-autoupdate-bedrock@chore/add-tag-in-sns-message
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SNS_ARN_DEV: ${{ secrets.AWS_SNS_ARN_DEV }}
+          AWS_SNS_ARN_STAGING: ${{ secrets.AWS_SNS_ARN_STAGING }}
+          INPUT_TRIGGERED_BY: ${{ github.repository }}
+          REF: ${{ steps.release.outputs.tag_name }}

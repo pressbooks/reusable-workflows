@@ -1,0 +1,97 @@
+name: Auto merge 🤖
+on:
+  workflow_call:
+    inputs:
+      pr_title_pattern:
+        required: false
+        type: string
+        default: '^(chore(l10n|i18n)?: update languages|^chore: Composer update with)'
+
+jobs:
+  workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Pull Request Title
+        id: title-check
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_TITLE_PATTERN="${{ inputs.pr_title_pattern }}"
+          shouldMerge=$(echo "$PR_TITLE" | grep -Eq "$PR_TITLE_PATTERN" && echo 'true' || echo 'false')
+          echo "shouldMerge=$shouldMerge" >> $GITHUB_OUTPUT
+
+      - name: Wait for checks to complete
+        if: steps.title-check.outputs.shouldMerge == 'true'
+        uses: actions/github-script@v7
+        env:
+          GITHUB_TOKEN: ${{secrets.PAT_FOR_GITHUB_ACTIONS}}
+        with:
+          result-encoding: string
+          script: |
+            const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const MAX_ATTEMPTS = 30; // Maximum number of attempts to poll the API
+
+            async function waitForChecks() {
+              let attempts = 0; // Counter for the number of attempts
+
+              while (attempts < MAX_ATTEMPTS) {
+                const response = await github.rest.checks.listForRef({
+                  owner: context.payload.repository.owner.login,
+                  repo: context.payload.repository.name,
+                  ref: context.payload.pull_request.head.ref
+                });
+                // Filter out checks that are not completed and not the current check
+                const checks = response.data.check_runs.filter(check => {
+                  console.log(check.name);
+                  return check.status !== 'completed' && !check.name.includes('automerge');
+                });
+
+                if (checks.length === 0) {
+                  console.log('All checks completed.');
+                  break;
+                }
+
+                console.log('Waiting for checks to complete...');
+                await wait(10000); // Wait for 10 seconds
+                attempts++; // Increment the counter
+              }
+
+              if (attempts === MAX_ATTEMPTS) {
+                console.log('Reached maximum number of attempts. Stopping...');
+              }
+            }
+
+            return waitForChecks();
+          github-token: ${{github.token}}
+
+      - name: Merge Composer auto update PRs
+        if: steps.title-check.outputs.shouldMerge == 'true'
+        uses: actions/github-script@v7
+        env:
+          GITHUB_TOKEN: ${{secrets.PAT_FOR_GITHUB_ACTIONS}}
+        with:
+          result-encoding: string
+          script: |
+            github.rest.pulls.createReview({
+              owner: context.payload.repository.owner.login,
+              repo: context.payload.repository.name,
+              pull_number: context.payload.pull_request.number,
+              event: 'APPROVE'
+            }).then(() => {
+              github.rest.pulls.listReviews({
+                owner: context.payload.repository.owner.login,
+                repo: context.payload.repository.name,
+                pull_number: context.payload.pull_request.number
+              }).then((reviews) => {
+                const approvingReviews = reviews.data.filter(review => review.state === 'APPROVED')
+                if (approvingReviews.length > 0) {
+                  github.rest.pulls.merge({
+                    owner: context.payload.repository.owner.login,
+                    repo: context.payload.repository.name,
+                    pull_number: context.payload.pull_request.number,
+                    merge_method: 'squash',
+                    commit_title: context.payload.pull_request.title
+                  })
+                }
+              })
+            })
+          github-token: ${{github.token}}

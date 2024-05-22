@@ -1,0 +1,67 @@
+name: Composer Update 🎵
+
+on:
+  workflow_call:
+    inputs:
+      packages:
+        type: string
+        description: 'List of space seperated packages to be update. The packages can include a specific reference (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)'
+  workflow_dispatch:
+    inputs:
+      packages:
+        type: string
+        description: 'List of space seperated packages to be update. The packages can include a specific reference (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.1
+          tools: composer
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+          PACKAGIST_TOKEN: ${{ secrets.PAT_COMPOSER_UPDATE }}
+      - name: Install PHP dependencies
+        run: |
+          export PATH="$HOME/.composer/vendor/bin:$PATH"
+          composer config --auth http-basic.objectcache.pro token "${{ secrets.OBJECT_CACHE_PRO_TOKEN }}";
+          composer install --no-interaction
+      - name: Setup github config and create new branch
+        run: |
+          git config --global user.email "ops@pressbooks.com"
+          git config --global user.name "pressbooks-ops"
+          git checkout -b "${GITHUB_REF_NAME}-updated"
+      - name: Update packages
+        run: |
+          counter_packages_updated=0
+          IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
+          for package in "${packages[@]}"; do
+            if [[ "$package" != *:* ]]; then
+              composer update "$package" --with-all-dependencies
+            else
+              composer require "$package" --sort-packages
+            fi
+            if git diff --quiet; then
+              echo "No changes to commit."
+            else
+              git add .
+              git commit -m "Chore: upgrading $package"
+              counter_packages_updated=$((counter_packages_updated + 1))
+            fi
+          done
+          echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
+      - name: Push changes and create pull request
+        run: |
+          echo "COUNTER_PACKAGES_UPDATED=${COUNTER_PACKAGES_UPDATED:-0}" >> $GITHUB_ENV
+          if [ "${COUNTER_PACKAGES_UPDATED:-0}" -gt 0 ]; then
+            git push -u origin "${GITHUB_REF_NAME}-updated"
+            current_date=$(date +%Y-%m-%d)
+            gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body ""
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
