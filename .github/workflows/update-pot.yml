@@ -38,13 +38,13 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const github = require('@actions/github');
+            const { getOctokit, context } = require('@actions/github');
             const core = require('@actions/core');
-            const token = core.getInput('github-token');
-            const octokit = github.getOctokit(token);
+            const token = core.getInput('GITHUB_TOKEN');
+            const octokit = getOctokit(token);
             const pr = await octokit.pulls.get({
-              owner: github.context.repo.owner,
-              repo: github.context.repo.repo,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
               pull_number: ${{ inputs.pull_request_number }}
             });
             const labels = pr.data.labels.map(label => label.name).join(',');
