@@ -38,13 +38,19 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const pr = await github.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+            const github = require('@actions/github');
+            const core = require('@actions/core');
+            const token = core.getInput('github-token');
+            const octokit = github.getOctokit(token);
+            const pr = await octokit.pulls.get({
+              owner: github.context.repo.owner,
+              repo: github.context.repo.repo,
               pull_number: ${{ inputs.pull_request_number }}
             });
             const labels = pr.data.labels.map(label => label.name).join(',');
             core.setOutput('labels', labels);
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if PR is a release PR
         id: skip_if_autorelease
