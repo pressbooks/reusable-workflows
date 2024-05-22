@@ -53,24 +53,24 @@ jobs:
         run: echo "${{ steps.get_pr_labels.outputs.labels }}"
 
       - name: Set up PHP
-        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease')
+        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
           tools: wp-cli/wp-cli-bundle
 
       - name: Update POT file
-        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease')
+        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
         run: wp i18n make-pot . languages/${{ github.event.repository.name }}.pot --domain=${{ inputs.domain }} --slug=${{ inputs.slug }} --package-name="${{ inputs.package_name }}" --headers='${{ inputs.headers }}'
 
       - name: Configure Git
-        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease')
+        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
       - name: Commit and push .pot file
-        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease')
+        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
         run: |
           git checkout ${{ github.head_ref }}
           git add languages/${{ github.event.repository.name }}.pot
