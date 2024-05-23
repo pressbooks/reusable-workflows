@@ -38,8 +38,8 @@ jobs:
 
       - name: Commit and push built assets
         run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
+          git config --local user.email "ops@pressbooks.com"
+          git config --local user.name "Pressbooks Ops"
           git add -A
           git diff --staged --quiet || {
             git commit --amend --no-edit
