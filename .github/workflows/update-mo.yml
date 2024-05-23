@@ -29,5 +29,7 @@ jobs:
       - name: Commit and push .mo files
         run: |
           git add -A
-          git commit -m "chore: update .mo files [skip tests]"
-          git push origin ${{ github.head_ref }}
+          git diff --staged --quiet || {
+                git commit --amend --no-edit
+                git push origin ${{ github.head_ref }} --force-with-lease
+            }

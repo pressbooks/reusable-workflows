@@ -71,5 +71,7 @@ jobs:
         run: |
           git checkout ${{ github.head_ref }}
           git add languages/${{ github.event.repository.name }}.pot
-          git commit -m "chore(l10n): update pot file [skip tests]"
-          git push origin ${{ github.head_ref }}
+          git diff --staged --quiet || {
+            git commit --amend --no-edit
+            git push origin ${{ github.head_ref }} --force-with-lease
+          }
