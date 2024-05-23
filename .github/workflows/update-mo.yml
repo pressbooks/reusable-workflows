@@ -23,8 +23,8 @@ jobs:
 
       - name: Configure Git
         run: |
-          git config --local user.email "ops@pressbooks.com"
-          git config --local user.name "Pressbooks Ops"
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
 
       - name: Commit and push .mo files
         run: |
