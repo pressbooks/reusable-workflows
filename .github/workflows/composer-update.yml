@@ -49,7 +49,7 @@ jobs:
             if git diff --quiet; then
               echo "No changes to commit."
             else
-              git add .
+              git add composer.*
               git commit -m "Chore: upgrading $package"
               counter_packages_updated=$((counter_packages_updated + 1))
             fi
