@@ -44,7 +44,7 @@ jobs:
             if [[ "$package" != *:* ]]; then
               composer update "$package" --with-all-dependencies
             else
-              composer require "$package" --sort-packages
+              composer require "$package" --update-with-all-dependencies --sort-packages
             fi
             if git diff --quiet; then
               echo "No changes to commit."
