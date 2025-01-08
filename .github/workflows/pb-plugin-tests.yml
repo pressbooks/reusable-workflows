@@ -51,7 +51,7 @@ jobs:
             wordpress: 6.7
             experimental: true
 
-    name: PHP MySQL
+    name: Matrix
 
     steps:
       - name: Checkout code
