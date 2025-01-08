@@ -25,17 +25,17 @@ on:
         default: true
 
 jobs:
-  mysql-tests:
-    if: "!inputs.use_mariadb"
+  tests:
     runs-on: ubuntu-20.04
+    
     services:
       database:
-        image: mysql:8.0
+        image: ${{ (inputs.use_mariadb) && 'mariadb:10.5' || 'mysql:8.0' }}
         env:
           MYSQL_ROOT_PASSWORD: root
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=5s --health-retries=3
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
 
     strategy:
       fail-fast: false
@@ -51,108 +51,7 @@ jobs:
             wordpress: 6.7
             experimental: true
 
-    name: Matrix
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup PHP and extensions
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ matrix.php }}
-          tools: composer
-          coverage: pcov
-          extensions: imagick
-
-      - name: Get Composer Cache Directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
-
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ steps.composer-cache.outputs.dir }}
-            vendor
-          key: ${{ runner.os }}-composer-${{ matrix.php }}-${{ hashFiles('**/composer.json', '**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-composer-${{ matrix.php }}-
-            ${{ runner.os }}-composer-
-
-      - name: Cache WordPress test suite
-        uses: actions/cache@v4
-        with:
-          path: /tmp/wordpress-tests-lib
-          key: ${{ runner.os }}-wordpress-${{ matrix.wordpress }}-${{ hashFiles('bin/install-wp-tests.sh') }}
-
-      - name: Install PHP dependencies
-        env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{secrets.PAT_FOR_GITHUB_ACTIONS}}"} }'
-        run: |
-          export PATH="$HOME/.composer/vendor/bin:$PATH"
-          composer install --no-interaction --prefer-dist
-          echo "REPO_NAME=$(basename $(pwd))" >> $GITHUB_ENV
-
-      - name: Check Standards
-        run: composer standards
-
-      - name: Require Pressbooks
-        if: inputs.requires_pressbooks == true
-        run: |
-          git clone --depth=1 --single-branch https://github.com/pressbooks/pressbooks.git ../pressbooks
-          cd ../pressbooks && composer install --no-dev --prefer-dist
-          cd ../$REPO_NAME
-
-      - name: Require Private Repo
-        if: inputs.requires_private_repo != ''
-        run: |
-          git clone --depth=1 --single-branch https://x-access-token:${{secrets.PAT_FOR_GITHUB_ACTIONS}}@github.com/pressbooks/${{ inputs.requires_private_repo }}.git ../${{ inputs.requires_private_repo }}
-          cd ../${{ inputs.requires_private_repo }} && composer install --no-dev --prefer-dist
-          cd ../$REPO_NAME
-
-      - name: Install WP tests
-        run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 ${{ matrix.wordpress }}
-
-      - name: Run PHP Tests
-        if: matrix.experimental == true
-        run: composer test
-
-      - name: Run PHP Tests and PCOV
-        if: matrix.experimental == false && inputs.code_coverage == true
-        run: composer test-coverage
-
-      - name: Upload Coverage to Codecov
-        if: matrix.experimental == false && inputs.code_coverage == true
-        run: bash <(curl -s https://codecov.io/bash)
-
-  mariadb-tests:
-    if: inputs.use_mariadb
-    runs-on: ubuntu-20.04
-    services:
-      database:
-        image: mariadb:10.5
-        env:
-          MYSQL_ROOT_PASSWORD: root
-        ports:
-          - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=5s --health-retries=3
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - php: 8.1
-            wordpress: 6.7
-            experimental: false
-          - php: 8.1
-            wordpress: latest
-            experimental: false
-          - php: 8.2
-            wordpress: 6.7
-            experimental: true
-
-    name: PHP MariaDB
+    name: PHP ${{ matrix.php }} - WP ${{ matrix.wordpress }} - ${{ inputs.use_mariadb && 'MariaDB' || 'MySQL' }}
 
     steps:
       - name: Checkout code
