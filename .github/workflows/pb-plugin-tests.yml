@@ -51,7 +51,7 @@ jobs:
             wordpress: 6.7
             experimental: true
 
-    name: PHP ${{ matrix.php }} - WP ${{ matrix.wordpress }} - MySQL
+    name: PHP MySQL
 
     steps:
       - name: Checkout code
@@ -152,7 +152,7 @@ jobs:
             wordpress: 6.7
             experimental: true
 
-    name: PHP ${{ matrix.php }} - WP ${{ matrix.wordpress }} - MariaDB
+    name: PHP MariaDB
 
     steps:
       - name: Checkout code
