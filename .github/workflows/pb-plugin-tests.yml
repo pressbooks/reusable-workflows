@@ -27,29 +27,35 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-20.04
-    continue-on-error: ${{ matrix.experimental }}
+    
+    services:
+      database:
+        image: ${{ (inputs.use_mariadb) && 'mariadb:10.5' || 'mysql:8.0' }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=5s --health-retries=3
+
     strategy:
       fail-fast: false
       matrix:
-        php: [ 8.1, 8.2 ]
-        wordpress: [ 6.7, latest ]
-        experimental: [ false ]
         include:
+          - php: 8.1
+            wordpress: 6.7
+            experimental: false
+          - php: 8.1
+            wordpress: latest
+            experimental: true
           - php: 8.2
             wordpress: 6.7
             experimental: true
 
-    name: Test - PHP ${{ matrix.php }} - WP ${{ matrix.wordpress }}
+    name: PHP ${{ matrix.php }} - WP ${{ matrix.wordpress }} - ${{ (inputs.use_mariadb) && 'MariaDB' || 'MySQL' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Cache Composer packages
-        uses: actions/cache@v4
-        with:
-          path: vendor
-          key: php-${{ matrix.php }}-composer-${{ hashFiles('**/composer.lock') }}
 
       - name: Setup PHP and extensions
         uses: shivammathur/setup-php@v2
@@ -59,79 +65,63 @@ jobs:
           coverage: pcov
           extensions: imagick
 
+      - name: Get Composer Cache Directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.composer-cache.outputs.dir }}
+            vendor
+          key: ${{ runner.os }}-composer-${{ matrix.php }}-${{ hashFiles('**/composer.json', '**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-${{ matrix.php }}-
+            ${{ runner.os }}-composer-
+
+      - name: Cache WordPress test suite
+        uses: actions/cache@v4
+        with:
+          path: /tmp/wordpress-tests-lib
+          key: ${{ runner.os }}-wordpress-${{ matrix.wordpress }}-${{ hashFiles('bin/install-wp-tests.sh') }}
+
       - name: Install PHP dependencies
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{secrets.PAT_FOR_GITHUB_ACTIONS}}"} }'
         run: |
           export PATH="$HOME/.composer/vendor/bin:$PATH"
-          composer install --no-interaction
+          composer install --no-interaction --prefer-dist
           echo "REPO_NAME=$(basename $(pwd))" >> $GITHUB_ENV
 
       - name: Check Standards
         run: composer standards
 
-      - name: Remove MySQL
-        if: inputs.use_mariadb == true
-        run: sudo apt remove mysql-server-8.0 mysql-common
-
-      - name: Update apt
-        if: inputs.use_mariadb == true
-        run: sudo apt-get update
-
-      - name: Install MariaDB
-        if: inputs.use_mariadb == true
-        run: |
-          sudo apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xF1656F24C74CD1D8
-          echo "deb http://downloads.mariadb.com/MariaDB/mariadb-10.5/repo/ubuntu focal main" | sudo tee /etc/apt/sources.list.d/mariadb.list
-          sudo apt-get update -o Dir::Etc::sourcelist="sources.list.d/mariadb.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
-          sudo apt-get install mariadb-server-10.5 mariadb-client-10.5
-          sudo mysqladmin -p'' password 'root'
-
-      - name: Start Database
-        run: sudo systemctl start mysql.service && mysql --version
-
       - name: Require Pressbooks
         if: inputs.requires_pressbooks == true
         run: |
-          git clone --depth=1 https://github.com/pressbooks/pressbooks.git ../pressbooks
-          cd ../pressbooks && composer install --no-dev
+          git clone --depth=1 --single-branch https://github.com/pressbooks/pressbooks.git ../pressbooks
+          cd ../pressbooks && composer install --no-dev --prefer-dist
           cd ../$REPO_NAME
 
       - name: Require Private Repo
         if: inputs.requires_private_repo != ''
         run: |
-          git clone --depth=1 https://x-access-token:${{secrets.PAT_FOR_GITHUB_ACTIONS}}@github.com/pressbooks/${{ inputs.requires_private_repo }}.git ../${{ inputs.requires_private_repo }}
-          cd ../${{ inputs.requires_private_repo }} && composer install --no-dev
+          git clone --depth=1 --single-branch https://x-access-token:${{secrets.PAT_FOR_GITHUB_ACTIONS}}@github.com/pressbooks/${{ inputs.requires_private_repo }}.git ../${{ inputs.requires_private_repo }}
+          cd ../${{ inputs.requires_private_repo }} && composer install --no-dev --prefer-dist
           cd ../$REPO_NAME
 
       - name: Install WP tests
-        run: bash bin/install-wp-tests.sh wordpress_test root root localhost ${{ matrix.wordpress }}
+        run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 ${{ matrix.wordpress }}
 
       - name: Run PHP Tests
-        run: composer test
         if: matrix.experimental == true
+        run: composer test
 
       - name: Run PHP Tests and PCOV
-        run: composer test-coverage
         if: matrix.experimental == false && inputs.code_coverage == true
+        run: composer test-coverage
 
       - name: Upload Coverage to Codecov
-        run: bash <(curl -s https://codecov.io/bash)
         if: matrix.experimental == false && inputs.code_coverage == true
-
-  coverage:
-    runs-on: ubuntu-latest
-    needs:
-      - tests
-    name: Upload coverage
-    if: needs.tests.outputs.coverage == 'true' && inputs.code_coverage == true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Fetch code coverage artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: code-coverage
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: bash <(curl -s https://codecov.io/bash)
