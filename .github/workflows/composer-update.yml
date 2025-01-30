@@ -13,7 +13,7 @@ on:
         description: 'List of space seperated packages to be update. The packages can include a specific reference (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)'
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:

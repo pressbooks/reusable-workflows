@@ -7,12 +7,9 @@ identical changes to every repo that uses the action.
 
 ### Reusable workflows list
 
-* update-pot.yml
+* update-translations.yml
 
-This reusable workflow automatically generates and commits a new .pot file to any PR branches.
-
-This reusable workflow automatically generates and commits machine-readable translation files to any PR branches which
-update the .po files in that repository.
+This reusable workflow automatically updates translation files (.pot and .mo) whenever relevant files change in a pull request and opens a PR with the changes.
 
 * npm-build.yml
 
