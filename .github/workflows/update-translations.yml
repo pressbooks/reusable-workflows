@@ -45,10 +45,10 @@ jobs:
         if: contains(github.event.pull_request.changed_files, '.php') || contains(github.event.pull_request.changed_files, '.js')
         run: |
           wp i18n make-pot . languages/${{ github.event.repository.name }}.pot \
-            --domain="pressbooks-network-catalog" \
-            --slug="pressbooks-network-catalog" \
-            --package-name="Pressbooks Network Catalog" \
-            --headers='{"Report-Msgid-Bugs-To": "https://github.com/pressbooks/pressbooks-network-catalog/issues"}'
+            --domain="${{ inputs.domain }}" \
+            --slug="${{ inputs.slug }}" \
+            --package-name="${{ inputs.package_name }}" \
+            --headers='${{ inputs.headers }}'
 
       # Update .mo files if .po files changed
       - name: Generate .mo files
