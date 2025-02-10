@@ -85,6 +85,6 @@ jobs:
           git add languages/
           git commit -m "chore(l10n): update translation files"
           git push origin l10n/update-translations
-          gh pr create --title "Update translation files" --body "Automated update of translation files" --base ${{ github.head_ref }} --head l10n/update-translations
+          gh pr create --title "chore(l10n): update translation files" --body "Automated update of translation files" --base ${{ github.head_ref }} --head l10n/update-translations
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
