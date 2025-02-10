@@ -1,13 +1,21 @@
 name: Update Translation Files 🌐
 
+
 on:
-  pull_request:
-    branches: [dev]
-    paths:
-      - "**.php"
-      - "**.js"
-      - "languages/*.po"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      domain:
+        type: string
+        required: true
+      slug:
+        type: string
+        required: true
+      package_name:
+        type: string
+        required: true
+      headers:
+        type: string
+        required: true
 
 jobs:
   update-translation-files:
