@@ -1,5 +1,4 @@
-name: Update Translation Files 🌐
-
+\name: Update Translation Files 🌐
 
 on:
   workflow_call:
@@ -36,11 +35,18 @@ jobs:
               repo: context.repo.repo,
               pull_number: ${{ github.event.pull_request.number }}
             });
-            const labels = pr.data.labels.map(label => label.name).join(',');
-            console.log('Pull request labels:', labels);
-            core.setOutput('labels', labels);
+            const labels = pr.data.labels.map(label => label.name);
+            console.log('Pull request labels:', labels.join(', '));
+            core.setOutput('labels', labels.join(','));
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+
+      # Stop execution if PR contains the "autorelease" label
+      - name: Check for autorelease label
+        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease')
+        run: |
+          echo "Skipping translation updates because PR is labeled 'autorelease'."
+          exit 0
 
       - name: Detect changed files
         id: changes
