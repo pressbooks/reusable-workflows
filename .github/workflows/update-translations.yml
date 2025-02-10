@@ -54,7 +54,6 @@ jobs:
               - 'languages/**/*.po'
 
       - name: Set up PHP
-        if: steps.changes.outputs.php_js_files == 'true' || steps.changes.outputs.po_files == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
