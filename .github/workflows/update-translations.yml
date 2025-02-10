@@ -42,7 +42,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
 
+      - name: Detect changed files
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            php_js_files:
+              - '**/*.php'
+              - '**/*.js'
+            po_files:
+              - 'languages/**/*.po'
+
       - name: Set up PHP
+        if: steps.changes.outputs.php_js_files == 'true' || steps.changes.outputs.po_files == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
@@ -50,7 +62,7 @@ jobs:
 
       # Update .pot file if PHP or JS files changed
       - name: Update POT file
-        if: contains(github.event.pull_request.changed_files, '.php') || contains(github.event.pull_request.changed_files, '.js')
+        if: steps.changes.outputs.php_js_files == 'true'
         run: |
           wp i18n make-pot . languages/${{ github.event.repository.name }}.pot \
             --domain="${{ inputs.domain }}" \
@@ -60,7 +72,7 @@ jobs:
 
       # Update .mo files if .po files changed
       - name: Generate .mo files
-        if: contains(github.event.pull_request.changed_files, '.po')
+        if: steps.changes.outputs.po_files == 'true'
         run: wp i18n make-mo languages
 
       - name: Configure Git
