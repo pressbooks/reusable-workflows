@@ -74,6 +74,12 @@ jobs:
         if: steps.changes.outputs.po_files == 'true'
         run: wp i18n make-mo languages
 
+      - name: Configure Git
+        if: steps.changes.outputs.php_js_files == 'true' || steps.changes.outputs.po_files == 'true'
+        run: |
+          git config --global user.email "ops@pressbooks.com"
+          git config --global user.name "Pressbooks Ops"
+
       - name: Commit and push translation files
         run: |
           git checkout -b l10n/update-translations
