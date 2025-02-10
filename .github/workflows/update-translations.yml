@@ -1,4 +1,4 @@
-\name: Update Translation Files 🌐
+name: Update Translation Files 🌐
 
 on:
   workflow_call:
