@@ -43,6 +43,56 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
         run: gh release upload ${{ steps.release.outputs.tag_name }} ${{github.workspace}}/$GITHUB_REPO_SLUG-$GITHUB_TAG.zip --clobber
+      - name: Extract GitHub Repo Name
+        id: repo_name
+        run: |
+            REPO_NAME=$(echo "${{ github.repository }}" | awk -F'/' '{print $2}')
+            echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+      - name: Get latest release info
+        if: ${{ steps.release.outputs.release_created }}
+        id: get_release
+        run: |
+          REPO="${{ github.repository }}"
+          TAG_NAME="${{ steps.release.outputs.tag_name }}"
+          RELEASE_DATA=$(gh release view "$TAG_NAME" --repo "$REPO" --json tagName,url,body)
+          RELEASE_URL=$(echo "$RELEASE_DATA" | jq -r '.url')
+          RELEASE_NOTES=$(echo "$RELEASE_DATA" | jq -r '.body')
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$RELEASE_NOTES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Preprocess Release Notes
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          # Extract and format release notes correctly
+          FORMATTED_NOTES=$(echo "${{ env.RELEASE_NOTES }}" \
+            | sed -E 's/^### (.*)/*\1*/g' \
+            | sed -E 's/^## (.*)/*\1*/g' \
+            | sed 's/^* /• /' \
+            | sed -E 's/\[(.*)\]\((https?:\/\/[^)]+)\)/<\2|\1>/g')
+          
+          # Store it in environment variables
+          echo "FORMATTED_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$FORMATTED_NOTES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+        shell: bash
+      - name: Send Slack Notification
+        if: ${{ steps.release.outputs.release_created }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_RELEASES_WEBHOOK }}
+          SLACK_MSG_AUTHOR: "pressbooks-ops"
+          SLACK_MESSAGE: |
+            *New Release for `${{ github.repository }}` published! 🚀*
+            ${{ env.FORMATTED_NOTES }}
+          SLACK_USERNAME: "PB Release Bot"
+          SLACK_ICON_EMOJI: ":pb:"
+          SLACK_CHANNEL: "latest-releases"
+          SLACK_FOOTER: ""
+          MSG_MINIMAL: 1
       - name: Trigger staging bedrock updates
         if: ${{ steps.release.outputs.release_created }}
         uses: pressbooks/composer-autoupdate-bedrock@main
