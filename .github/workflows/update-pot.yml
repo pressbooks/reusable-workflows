@@ -66,26 +66,12 @@ jobs:
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Create and push new branch for POT update
+      - name: Commit and push .pot file
         if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
         run: |
-          git checkout -b l10n/update-pot-${{ github.run_id }}
+          git checkout ${{ github.head_ref }}
           git add languages/${{ github.event.repository.name }}.pot
-          
-          if ! git diff --staged --quiet; then
-            git commit -m "chore(l10n): update POT file"
-            git push origin l10n/update-pot-${{ github.run_id }}
-          else
-            echo "No changes detected in POT file, skipping commit."
-            exit 0
-          fi
-
-      - name: Create Pull Request for POT Update
-        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
-        run: |
-          gh pr create --title "chore(l10n): update POT file" \
-            --body "Automated update of POT file" \
-            --base ${{ github.head_ref }} \
-            --head l10n/update-pot-${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git diff --staged --quiet || {
+            git commit --amend --no-edit
+            git push origin ${{ github.head_ref }} --force-with-lease
+          }
