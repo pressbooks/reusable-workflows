@@ -68,7 +68,12 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         run: |
           # Extract and format release notes
-          FORMATTED_NOTES=$(echo "${{ env.RELEASE_NOTES }}" | sed -E 's/^## (.*)/*\1*/' | sed 's/^* /• /' | sed -E 's/\[(.*?)\]\((.*?)\)/<\2|\1>/g')
+          FORMATTED_NOTES=$(echo "${{ env.RELEASE_NOTES }}" \
+            | sed -E 's/^### (.*)/*\1*/g' \  # Convert H3 headers to Slack bold
+            | sed -E 's/^## (.*)/*\1*/g' \   # Convert H2 headers to Slack bold
+            | sed 's/^* /• /' \              # Fix bullet points
+            | sed -E 's/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/<\2|\1>/g')  # Fix Markdown links
+          
           # Store it in environment variables
           echo "FORMATTED_NOTES<<EOF" >> $GITHUB_ENV
           echo "$FORMATTED_NOTES" >> $GITHUB_ENV
@@ -80,8 +85,6 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_RELEASES_WEBHOOK }}
           SLACK_MESSAGE: |
             *🎉 New Release for `${{ github.repository }}` Published! 🚀*
-            *Version:* <${{ env.RELEASE_URL }}|${{ env.TAG_NAME }}>
-            *Changelog:*
             ${{ env.FORMATTED_NOTES }}
           SLACK_USERNAME: "PB Release Bot"
           SLACK_ICON_EMOJI: ":rocket:"
