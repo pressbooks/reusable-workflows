@@ -52,18 +52,18 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         id: get_release
         run: |
-            LATEST_RELEASE=$(gh release list --limit 1 --json tagName,url --jq '.[0]')
-            TAG_NAME=$(echo "$LATEST_RELEASE" | jq -r '.tagName')
-            RELEASE_URL=$(echo "$LATEST_RELEASE" | jq -r '.url')
-            RELEASE_NOTES=$(gh release view "$TAG_NAME" --json body --jq '.body')
-            
-            echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-            echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
-            echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
-            echo "$RELEASE_NOTES" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+          REPO="${{ github.repository }}"
+          TAG_NAME="${{ steps.release.outputs.tag_name }}"
+          RELEASE_DATA=$(gh release view "$TAG_NAME" --repo "$REPO" --json tagName,url,body)
+          RELEASE_URL=$(echo "$RELEASE_DATA" | jq -r '.url')
+          RELEASE_NOTES=$(echo "$RELEASE_DATA" | jq -r '.body')
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$RELEASE_NOTES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
         env:
-            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Send Slack Notification
         if: ${{ steps.release.outputs.release_created }}
         uses: rtCamp/action-slack-notify@v2
