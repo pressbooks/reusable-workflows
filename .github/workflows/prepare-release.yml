@@ -69,17 +69,16 @@ jobs:
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_RELEASES_WEBHOOK }}
+          SLACKIFY_MARKDOWN: 1
           SLACK_MESSAGE: |
-            *🎉 New Release for `${{ github.repository }}` Published! 🚀*
+            *🎉 New release for `${{ github.repository }}` published! 🚀*
             *Version:* `${{ env.TAG_NAME }}`
-            *Release Notes:* 
-            ``` 
             ${{ env.RELEASE_NOTES }}
-            ```
             *More details:* ${{ env.RELEASE_URL }}
-          SLACK_USERNAME: "GitHub Actions"
+          SLACK_USERNAME: "PB Release Bot"
           SLACK_ICON_EMOJI: ":pb:"
           SLACK_CHANNEL: "latest-releases"
+          SLACK_FOOTER: ""
       - name: Trigger staging bedrock updates
         if: ${{ steps.release.outputs.release_created }}
         uses: pressbooks/composer-autoupdate-bedrock@main
