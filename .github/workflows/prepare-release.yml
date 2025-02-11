@@ -62,7 +62,7 @@ jobs:
             echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
             echo "$RELEASE_NOTES" >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
-          env:
+        env:
             GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Send Slack Notification
         if: ${{ steps.release.outputs.release_created }}
