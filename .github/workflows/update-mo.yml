@@ -1,4 +1,4 @@
-name: Update MO Files 🌐
+name: Append MO Files 🌐
 
 on: workflow_call
 
@@ -26,24 +26,10 @@ jobs:
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Create and push new branch for MO update
+      - name: Commit and push .mo files
         run: |
-          git checkout -b l10n/update-mo-${{ github.run_id }}
-          git add languages/
-          
-          if ! git diff --staged --quiet; then
-            git commit -m "chore(l10n): update .mo files"
-            git push origin l10n/update-mo-${{ github.run_id }}
-          else
-            echo "No changes detected in .mo files, skipping commit."
-            exit 0
-          fi
-
-      - name: Create Pull Request for MO Updates
-        run: |
-          gh pr create --title "chore(l10n): update .mo files" \
-            --body "Automated update of .mo files" \
-            --base ${{ github.head_ref }} \
-            --head l10n/update-mo-${{ github.run_id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git add -A
+          git diff --staged --quiet || {
+                git commit --amend --no-edit
+                git push origin ${{ github.head_ref }} --force-with-lease
+            }
