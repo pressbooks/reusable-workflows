@@ -70,10 +70,10 @@ jobs:
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_RELEASES_WEBHOOK }}
           SLACK_MESSAGE: |
-            *🎉 New release for `${{ github.repository }}` published! 🚀*
-            *Version:* `${{ env.TAG_NAME }}`
-            ${{ env.RELEASE_NOTES }}
-            *More details:* ${{ env.RELEASE_URL }}
+            *🎉 New Release for `${{ github.repository }}` Published! 🚀*
+            *Version:* <${{ env.RELEASE_URL }}|${{ env.TAG_NAME }}>
+            *Changelog:*
+            $(echo "${{ env.RELEASE_NOTES }}" | sed -E 's/^## (.*)/*\1*/' | sed 's/^* /• /' | sed -E 's/\[(.*?)\]\((.*?)\)/<\2|\1>/g')
           SLACK_USERNAME: "PB Release Bot"
           SLACK_ICON_EMOJI: ":pb:"
           SLACK_CHANNEL: "latest-releases"
