@@ -53,7 +53,7 @@ jobs:
         if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.1'
+          php-version: '8.2'
           tools: wp-cli/wp-cli-bundle
 
       - name: Update POT file
