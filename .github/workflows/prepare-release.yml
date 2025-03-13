@@ -16,6 +16,11 @@ jobs:
         id: release
         with:
           token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.2
+          tools: composer
       - name: Set Environment Variables
         if: ${{ steps.release.outputs.release_created }}
         run: |
