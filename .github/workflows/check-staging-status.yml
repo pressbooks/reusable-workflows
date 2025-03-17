@@ -1,0 +1,193 @@
+name: Verify Staging Dependencies 🔄
+
+on:
+  workflow_call:
+    inputs:
+      base_branch:
+        description: 'The base branch to compare against (default: production)'
+        required: false
+        type: string
+        default: 'production'
+      staging_branch:
+        description: 'The staging branch to verify compatibility with (default: staging)'
+        required: false
+        type: string
+        default: 'staging'
+      dependency_file:
+        description: 'The dependency file to check (default: composer.json)'
+        required: false
+        type: string
+        default: 'composer.json'
+      lock_file:
+        description: 'The lock file to check (default: composer.lock)'
+        required: false
+        type: string
+        default: 'composer.lock'
+
+jobs:
+  check-dependencies:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_branch }}
+          path: base-branch
+
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.staging_branch }}
+          path: staging-branch
+
+      - name: Install jq for JSON parsing
+        run: sudo apt-get install -y jq
+
+      - name: Identify changed packages in dependency file
+        id: identify-changed-packages-json
+        run: |
+          echo "Identifying changed packages in ${{ inputs.dependency_file }}..."
+
+          # Extract package dependencies without PHP
+          pr_packages=$(jq -r '.require | to_entries[] | select(.key != "php") | .key' ${{ inputs.dependency_file }})
+          base_packages=$(jq -r '.require | to_entries[] | select(.key != "php") | .key' base-branch/${{ inputs.dependency_file }})
+
+          # Extract PHP version separately
+          php_version_pr=$(jq -r '.require.php' ${{ inputs.dependency_file }})
+          php_version_base=$(jq -r '.require.php' base-branch/${{ inputs.dependency_file }})
+
+          # Find changed packages
+          changed_packages=""
+          for package in $pr_packages; do
+            pr_version=$(jq -r ".require[\"$package\"]" ${{ inputs.dependency_file }})
+            base_version=$(jq -r ".require[\"$package\"]" base-branch/${{ inputs.dependency_file }})
+          
+            if [ "$pr_version" != "$base_version" ]; then
+              changed_packages="$changed_packages $package"
+            fi
+          done
+
+          # Check for new packages
+          for package in $pr_packages; do
+            if ! echo "$base_packages" | grep -q "^$package$"; then
+              changed_packages="$changed_packages $package"
+            fi
+          done
+
+          # If PHP version changed, track it separately
+          if [ "$php_version_pr" != "$php_version_base" ]; then
+            echo "PHP version changed from $php_version_base to $php_version_pr"
+            changed_packages="php $changed_packages"
+          fi
+
+          if [ -z "$changed_packages" ]; then
+            echo "No packages have been changed in ${{ inputs.dependency_file }}."
+            echo "changed_packages=" >> $GITHUB_ENV
+          else
+            echo "Changed packages in ${{ inputs.dependency_file }}:"
+            echo "$changed_packages"
+            echo "changed_packages=$(echo "$changed_packages" | xargs)" >> $GITHUB_ENV
+          fi
+
+      - name: Compare changed packages with staging
+        if: env.changed_packages != ''
+        run: |
+          echo "Comparing changed packages in ${{ inputs.dependency_file }} with staging..."
+
+          # Convert space-separated list into array
+          IFS=' ' read -ra PACKAGES <<< "${{ env.changed_packages }}"
+          
+          mismatched=""
+          for package in "${PACKAGES[@]}"; do
+            # Skip empty elements
+            if [ -z "$package" ]; then
+              continue
+            fi
+          
+            pr_version=$(jq -r ".require[\"$package\"]" ${{ inputs.dependency_file }})
+            staging_version=$(jq -r ".require[\"$package\"]" staging-branch/${{ inputs.dependency_file }})
+
+            if [ "$pr_version" != "$staging_version" ]; then
+              mismatched="$mismatched\n$package: PR version $pr_version, Staging version $staging_version"
+            fi
+          done
+
+          if [ -n "$mismatched" ]; then
+            echo "The following packages in ${{ inputs.dependency_file }} are not aligned with staging:"
+            echo -e "$mismatched"
+            exit 1
+          else
+            echo "All changed packages in ${{ inputs.dependency_file }} are aligned with staging."
+          fi
+
+      - name: Identify changed packages in lock file
+        id: identify-changed-packages-lock
+        if: inputs.lock_file != ''
+        run: |
+          echo "Identifying changed packages in ${{ inputs.lock_file }}..."
+
+          pr_lock_packages=$(jq -r '.packages[] | .name' ${{ inputs.lock_file }})
+          base_lock_packages=$(jq -r '.packages[] | .name' base-branch/${{ inputs.lock_file }})
+
+          # Find changed packages
+          changed_lock_packages=""
+          for package in $pr_lock_packages; do
+            pr_version=$(jq -r ".packages[] | select(.name == \"$package\") | .version" ${{ inputs.lock_file }})
+            base_version=$(jq -r ".packages[] | select(.name == \"$package\") | .version" base-branch/${{ inputs.lock_file }})
+          
+            if [ "$pr_version" != "$base_version" ]; then
+              changed_lock_packages="$changed_lock_packages $package"
+            fi
+          done
+
+          # Check for new packages
+          for package in $pr_lock_packages; do
+            if ! echo "$base_lock_packages" | grep -q "^$package$"; then
+              changed_lock_packages="$changed_lock_packages $package"
+            fi
+          done
+
+          if [ -z "$changed_lock_packages" ]; then
+            echo "No packages have been changed in ${{ inputs.lock_file }}."
+            echo "changed_lock_packages=" >> $GITHUB_ENV
+          else
+            echo "Changed packages in ${{ inputs.lock_file }}:"
+            echo "$changed_lock_packages"
+            echo "changed_lock_packages=$(echo "$changed_lock_packages" | xargs)" >> $GITHUB_ENV
+          fi
+
+      - name: Compare changed packages in lock file with staging
+        if: env.changed_lock_packages != '' && inputs.lock_file != ''
+        run: |
+          echo "Comparing changed packages in ${{ inputs.lock_file }} with staging..."
+
+          # Convert space-separated list into array
+          IFS=' ' read -ra LOCK_PACKAGES <<< "${{ env.changed_lock_packages }}"
+          
+          mismatched_lock=""
+          for package in "${LOCK_PACKAGES[@]}"; do
+            # Skip empty elements
+            if [ -z "$package" ]; then
+              continue
+            fi
+          
+            pr_version=$(jq -r ".packages[] | select(.name == \"$package\") | .version" ${{ inputs.lock_file }})
+            staging_version=$(jq -r ".packages[] | select(.name == \"$package\") | .version" staging-branch/${{ inputs.lock_file }})
+
+            if [ "$pr_version" != "$staging_version" ]; then
+              mismatched_lock="$mismatched_lock\n$package: PR version $pr_version, Staging version $staging_version"
+            fi
+          done
+
+          if [ -n "$mismatched_lock" ]; then
+            echo "The following packages in ${{ inputs.lock_file }} are not aligned with staging:"
+            echo -e "$mismatched_lock"
+            exit 1
+          else
+            echo "All changed packages in ${{ inputs.lock_file }} are aligned with staging."
+          fi
