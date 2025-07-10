@@ -21,8 +21,8 @@ on:
         required: true
       pull_request_number:
         type: number
-        description: 'Pull request number'
-        required: true
+        description: 'Pull request number (optional for direct merges)'
+        required: false
     secrets:
       PAT_FOR_GITHUB_ACTIONS:
         description: 'Personal Access Token for GitHub Actions'
@@ -43,27 +43,41 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: ${{ inputs.pull_request_number }}
-            });
+            const prNumber = ${{ inputs.pull_request_number || 'null' }};
             
-            const labels = pr.data.labels.map(label => label.name).join(',');
-            const headRef = pr.data.head.ref;
-            const headSha = pr.data.head.sha;
-            
-            console.log('Pull request labels:', labels);
-            console.log('Head ref:', headRef);
-            console.log('Head SHA:', headSha);
-            
-            core.setOutput('labels', labels);
-            core.setOutput('head_ref', headRef);
-            core.setOutput('head_sha', headSha);
-            
-            // Check if this is an autorelease PR
-            const isAutorelease = labels.includes('autorelease');
-            core.setOutput('skip_pot_update', isAutorelease);
+            if (prNumber && prNumber !== '' && prNumber !== 'null') {
+              // Handle PR-based workflow
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+              
+              const labels = pr.data.labels.map(label => label.name).join(',');
+              const headRef = pr.data.head.ref;
+              const headSha = pr.data.head.sha;
+              
+              console.log('Pull request labels:', labels);
+              console.log('Head ref:', headRef);
+              console.log('Head SHA:', headSha);
+              
+              core.setOutput('labels', labels);
+              core.setOutput('head_ref', headRef);
+              core.setOutput('head_sha', headSha);
+              core.setOutput('is_pr', 'true');
+              
+              // Check if this is an autorelease PR
+              const isAutorelease = labels.includes('autorelease');
+              core.setOutput('skip_pot_update', isAutorelease);
+            } else {
+              // Handle direct merge to dev
+              console.log('No PR number provided - handling direct merge');
+              core.setOutput('labels', '');
+              core.setOutput('head_ref', context.ref.replace('refs/heads/', ''));
+              core.setOutput('head_sha', context.sha);
+              core.setOutput('is_pr', 'false');
+              core.setOutput('skip_pot_update', 'false');
+            }
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
           
@@ -74,8 +88,8 @@ jobs:
           php-version: '8.2'
           tools: wp-cli/wp-cli-bundle
           
-      - name: Checkout PR branch
-        if: steps.get_pr_info.outputs.skip_pot_update == 'false'
+      - name: Checkout branch
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'true'
         run: |
           git checkout ${{ steps.get_pr_info.outputs.head_ref }}
           
@@ -96,32 +110,92 @@ jobs:
           git config --global user.name "GitHub Actions"
           
       - name: Check for changes and commit
+        id: check_changes
         if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         run: |
           git add languages/${{ github.event.repository.name }}.pot
           
           if git diff --staged --quiet; then
             echo "No changes to POT file"
+            echo "pot_updated=false" >> $GITHUB_OUTPUT
           else
-            echo "POT file has changes, committing..."
+            echo "POT file has changes"
+            echo "pot_updated=true" >> $GITHUB_OUTPUT
             
-            # Get the latest commit message
-            LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
-            
-            # Check if the last commit was already a POT update
-            if [[ "$LAST_COMMIT_MSG" == *"Update POT file"* ]]; then
-              echo "Amending existing POT update commit"
-              git commit --amend --no-edit
+            if [[ "${{ steps.get_pr_info.outputs.is_pr }}" == "true" ]]; then
+              echo "Committing to PR branch..."
+              
+              # Get the latest commit message
+              LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+              
+              # Check if the last commit was already a POT update
+              if [[ "$LAST_COMMIT_MSG" == *"Update POT file"* ]]; then
+                echo "Amending existing POT update commit"
+                git commit --amend --no-edit
+              else
+                echo "Creating new POT update commit"
+                git commit -m "Update POT file for translations"
+              fi
+              
+              git push origin ${{ steps.get_pr_info.outputs.head_ref }} --force-with-lease
             else
-              echo "Creating new POT update commit"
-              git commit -m "Update POT file for translations"
+              echo "Direct merge detected - will create PR for POT updates"
+              git stash push -m "POT file updates"
             fi
-            
-            git push origin ${{ steps.get_pr_info.outputs.head_ref }} --force-with-lease
           fi
           
+      - name: Create PR for POT updates
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'false' && steps.check_changes.outputs.pot_updated == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branchName = `pot-updates-${Date.now()}`;
+            const baseBranch = '${{ steps.get_pr_info.outputs.head_ref }}';
+            
+            // Create a new branch for the POT updates
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/heads/${branchName}`,
+              sha: context.sha
+            });
+            
+            // Apply the stashed changes to the new branch
+            const { execSync } = require('child_process');
+            execSync(`git checkout ${branchName}`);
+            execSync(`git stash pop`);
+            execSync(`git add languages/${context.repo.repo}.pot`);
+            execSync(`git commit -m "Update POT file for translations"`);
+            execSync(`git push origin ${branchName}`);
+            
+            // Create the pull request
+            const pr = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🌐 Update POT file for translations',
+              head: branchName,
+              base: baseBranch,
+              body: `This PR was automatically created to update the POT file with new translation strings.
+              
+              The POT file has been updated following a direct merge to the ${baseBranch} branch.
+              
+              🤖 Generated by GitHub Actions`
+            });
+            
+            console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
+            
+            // Add a label to the PR
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.data.number,
+              labels: ['translations', 'auto-generated']
+            });
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+          
       - name: Add comment to PR
-        if: steps.get_pr_info.outputs.skip_pot_update == 'false'
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'true'
         uses: actions/github-script@v7
         with:
           script: |
