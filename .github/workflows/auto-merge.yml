@@ -86,6 +86,8 @@ jobs:
             const MAX_ATTEMPTS = MAX_WAIT_MINUTES * 6; // Check every 10 seconds
             const REQUIRED_CHECKS = '${{ inputs.required_checks }}'.split(',').map(c => c.trim()).filter(c => c);
 
+            console.log(REQUIRED_CHECKS);
+
             console.log(`Waiting for checks to complete (max ${MAX_WAIT_MINUTES} minutes)`);
             console.log('Required checks:', REQUIRED_CHECKS.length > 0 ? REQUIRED_CHECKS : 'All checks');
 
