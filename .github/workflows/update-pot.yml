@@ -162,7 +162,8 @@ jobs:
             
             // Apply the stashed changes to the new branch
             const { execSync } = require('child_process');
-            execSync(`git checkout ${branchName}`);
+            execSync(`git fetch origin`);
+            execSync(`git checkout -b ${branchName} origin/${branchName}`);
             execSync(`git stash pop`);
             execSync(`git add languages/${context.repo.repo}.pot`);
             execSync(`git commit -m "Update POT file for translations"`);
