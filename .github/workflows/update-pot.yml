@@ -113,15 +113,36 @@ jobs:
         id: check_changes
         if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         run: |
-          git add languages/${{ github.event.repository.name }}.pot
-
-          if git diff --staged --quiet; then
-            echo "No changes to POT file"
-            echo "pot_updated=false" >> $GITHUB_OUTPUT
+          POT_FILE="languages/${{ github.event.repository.name }}.pot"
+          POT_UPDATED="false"
+          
+          # Check if POT file exists and has meaningful changes (not just timestamps)
+          if [ -f "$POT_FILE" ]; then
+            # Remove timestamp-related headers from both files for comparison
+            git show HEAD:"$POT_FILE" 2>/dev/null | sed '/^"POT-Creation-Date:/d; /^"PO-Revision-Date:/d' > "${POT_FILE}.old" || touch "${POT_FILE}.old"
+            sed '/^"POT-Creation-Date:/d; /^"PO-Revision-Date:/d' "$POT_FILE" > "${POT_FILE}.new"
+            
+            # Compare the files without timestamp headers
+            if diff -q "${POT_FILE}.old" "${POT_FILE}.new" > /dev/null 2>&1; then
+              echo "POT file has only timestamp changes, skipping PR creation"
+              POT_UPDATED="false"
+              rm -f "${POT_FILE}.old" "${POT_FILE}.new"
+            else
+              echo "POT file has meaningful changes (new/updated strings)"
+              POT_UPDATED="true"
+              rm -f "${POT_FILE}.old" "${POT_FILE}.new"
+              git add "$POT_FILE"
+            fi
           else
-            echo "POT file has changes"
-            echo "pot_updated=true" >> $GITHUB_OUTPUT
+            echo "POT file doesn't exist, creating new one"
+            POT_UPDATED="true"
+            git add "$POT_FILE"
+          fi
 
+          echo "pot_updated=${POT_UPDATED}" >> $GITHUB_OUTPUT
+
+          # Only commit if there are meaningful changes
+          if [[ "$POT_UPDATED" == "true" ]]; then
             if [[ "${{ steps.get_pr_info.outputs.is_pr }}" == "true" ]]; then
               echo "Committing to PR branch..."
 
