@@ -5,27 +5,27 @@ on:
     inputs:
       domain:
         type: string
-        description: 'Text domain for the POT file'
+        description: "Text domain for the POT file"
         required: true
       slug:
         type: string
-        description: 'Project slug'
+        description: "Project slug"
         required: true
       package_name:
         type: string
-        description: 'Package name for the header in the POT file'
+        description: "Package name for the header in the POT file"
         required: true
       headers:
         type: string
-        description: 'Additional headers in JSON format'
+        description: "Additional headers in JSON format"
         required: true
       pull_request_number:
         type: number
-        description: 'Pull request number (optional for direct merges)'
+        description: "Pull request number (optional for direct merges)"
         required: false
     secrets:
       PAT_FOR_GITHUB_ACTIONS:
-        description: 'Personal Access Token for GitHub Actions'
+        description: "Personal Access Token for GitHub Actions"
         required: true
 
 jobs:
@@ -37,14 +37,14 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
-          
+
       - name: Get pull request information
         id: get_pr_info
         uses: actions/github-script@v7
         with:
           script: |
             const prNumber = ${{ inputs.pull_request_number || 'null' }};
-            
+
             if (prNumber && prNumber !== '' && prNumber !== 'null') {
               // Handle PR-based workflow
               const pr = await github.rest.pulls.get({
@@ -52,20 +52,20 @@ jobs:
                 repo: context.repo.repo,
                 pull_number: prNumber
               });
-              
+
               const labels = pr.data.labels.map(label => label.name).join(',');
               const headRef = pr.data.head.ref;
               const headSha = pr.data.head.sha;
-              
+
               console.log('Pull request labels:', labels);
               console.log('Head ref:', headRef);
               console.log('Head SHA:', headSha);
-              
+
               core.setOutput('labels', labels);
               core.setOutput('head_ref', headRef);
               core.setOutput('head_sha', headSha);
               core.setOutput('is_pr', 'true');
-              
+
               // Check if this is an autorelease PR
               const isAutorelease = labels.includes('autorelease');
               core.setOutput('skip_pot_update', isAutorelease);
@@ -80,19 +80,19 @@ jobs:
             }
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
-          
+
       - name: Set up PHP
         if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: "8.2"
           tools: wp-cli/wp-cli-bundle
-          
+
       - name: Checkout branch
         if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'true'
         run: |
           git checkout ${{ steps.get_pr_info.outputs.head_ref }}
-          
+
       - name: Update POT file
         if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         run: |
@@ -102,48 +102,48 @@ jobs:
             --slug=${{ inputs.slug }} \
             --package-name="${{ inputs.package_name }}" \
             --headers='${{ inputs.headers }}'
-            
+
       - name: Configure Git
         if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          
+
       - name: Check for changes and commit
         id: check_changes
         if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         run: |
           git add languages/${{ github.event.repository.name }}.pot
-          
+
           if git diff --staged --quiet; then
             echo "No changes to POT file"
             echo "pot_updated=false" >> $GITHUB_OUTPUT
           else
             echo "POT file has changes"
             echo "pot_updated=true" >> $GITHUB_OUTPUT
-            
+
             if [[ "${{ steps.get_pr_info.outputs.is_pr }}" == "true" ]]; then
               echo "Committing to PR branch..."
-              
+
               # Get the latest commit message
               LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
-              
+
               # Check if the last commit was already a POT update
               if [[ "$LAST_COMMIT_MSG" == *"Update POT file"* ]]; then
                 echo "Amending existing POT update commit"
                 git commit --amend --no-edit
               else
                 echo "Creating new POT update commit"
-                git commit -m "Update POT file for translations"
+                git commit -m "chore: update POT file for translations"
               fi
-              
+
               git push origin ${{ steps.get_pr_info.outputs.head_ref }} --force-with-lease
             else
               echo "Direct merge detected - will create PR for POT updates"
               git stash push -m "POT file updates"
             fi
           fi
-          
+
       - name: Create PR for POT updates
         if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'false' && steps.check_changes.outputs.pot_updated == 'true'
         uses: actions/github-script@v7
@@ -151,7 +151,7 @@ jobs:
           script: |
             const branchName = `pot-updates-${Date.now()}`;
             const baseBranch = '${{ steps.get_pr_info.outputs.head_ref }}';
-            
+
             // Create a new branch for the POT updates
             await github.rest.git.createRef({
               owner: context.repo.owner,
@@ -159,7 +159,7 @@ jobs:
               ref: `refs/heads/${branchName}`,
               sha: context.sha
             });
-            
+
             // Apply the stashed changes to the new branch
             const { execSync } = require('child_process');
             execSync(`git fetch origin`);
@@ -168,23 +168,23 @@ jobs:
             execSync(`git add languages/${context.repo.repo}.pot`);
             execSync(`git commit -m "Update POT file for translations"`);
             execSync(`git push origin ${branchName}`);
-            
+
             // Create the pull request
             const pr = await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: '🌐 Update POT file for translations',
+              title: `chore(i18n): updates for project ${context.repo.repo}`,
               head: branchName,
               base: baseBranch,
               body: `This PR was automatically created to update the POT file with new translation strings.
-              
+
               The POT file has been updated following a direct merge to the ${baseBranch} branch.
-              
+
               🤖 Generated by GitHub Actions`
             });
-            
+
             console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
-            
+
             // Add a label to the PR
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
@@ -194,7 +194,7 @@ jobs:
             });
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
-          
+
       - name: Add comment to PR
         if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'true'
         uses: actions/github-script@v7
@@ -202,11 +202,11 @@ jobs:
           script: |
             // Check if POT file was updated
             const { execSync } = require('child_process');
-            
+
             try {
               const potPath = `languages/${context.repo.repo}.pot`;
               const result = execSync(`git log -1 --name-only --pretty=format: | grep -q "${potPath}" && echo "updated" || echo "no_changes"`, { encoding: 'utf8' }).trim();
-              
+
               if (result === 'updated') {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
