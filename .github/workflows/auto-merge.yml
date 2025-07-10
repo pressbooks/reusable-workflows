@@ -1,11 +1,32 @@
 name: Auto merge 🤖
+
 on:
   workflow_call:
     inputs:
       pr_title_pattern:
         required: false
         type: string
-        default: '^(chore(l10n|i18n)?: update languages|^chore: Composer update with)'
+        default: '^(chore\((l10n|i18n)\)?: update languages|^chore: Composer update with)'
+      merge_method:
+        required: false
+        type: string
+        default: "squash"
+        description: "Merge method: merge, squash, or rebase"
+      max_wait_minutes:
+        required: false
+        type: number
+        default: 15
+        description: "Maximum time to wait for checks in minutes"
+      skip_labels:
+        required: false
+        type: string
+        default: "do-not-merge,needs-review"
+        description: "Comma-separated labels that prevent auto-merge"
+      required_checks:
+        required: false
+        type: string
+        default: ""
+        description: "Comma-separated list of required check names (empty = wait for all)"
 
 jobs:
   workflow:
@@ -16,82 +37,261 @@ jobs:
         run: |
           PR_TITLE="${{ github.event.pull_request.title }}"
           PR_TITLE_PATTERN="${{ inputs.pr_title_pattern }}"
-          shouldMerge=$(echo "$PR_TITLE" | grep -Eq "$PR_TITLE_PATTERN" && echo 'true' || echo 'false')
-          echo "shouldMerge=$shouldMerge" >> $GITHUB_OUTPUT
 
-      - name: Wait for checks to complete
+          echo "Checking PR title: '$PR_TITLE'"
+          echo "Against pattern: '$PR_TITLE_PATTERN'"
+
+          if echo "$PR_TITLE" | grep -Eq "$PR_TITLE_PATTERN"; then
+            echo "✅ PR title matches pattern"
+            echo "shouldMerge=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ PR title does not match pattern"
+            echo "shouldMerge=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for blocking labels
         if: steps.title-check.outputs.shouldMerge == 'true'
+        id: label-check
         uses: actions/github-script@v7
-        env:
-          GITHUB_TOKEN: ${{secrets.PAT_FOR_GITHUB_ACTIONS}}
         with:
-          result-encoding: string
           script: |
-            const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-            const MAX_ATTEMPTS = 30; // Maximum number of attempts to poll the API
+            const skipLabels = '${{ inputs.skip_labels }}'.split(',').map(l => l.trim());
+            const prLabels = context.payload.pull_request.labels.map(l => l.name);
 
-            async function waitForChecks() {
-              let attempts = 0; // Counter for the number of attempts
+            console.log('Skip labels:', skipLabels);
+            console.log('PR labels:', prLabels);
 
-              while (attempts < MAX_ATTEMPTS) {
-                const response = await github.rest.checks.listForRef({
-                  owner: context.payload.repository.owner.login,
-                  repo: context.payload.repository.name,
-                  ref: context.payload.pull_request.head.ref
-                });
-                // Filter out checks that are not completed and not the current check
-                const checks = response.data.check_runs.filter(check => {
-                  console.log(check.name);
-                  return check.status !== 'completed' && !check.name.includes('automerge');
-                });
+            const hasBlockingLabel = skipLabels.some(label => prLabels.includes(label));
 
-                if (checks.length === 0) {
-                  console.log('All checks completed.');
-                  break;
-                }
-
-                console.log('Waiting for checks to complete...');
-                await wait(10000); // Wait for 10 seconds
-                attempts++; // Increment the counter
-              }
-
-              if (attempts === MAX_ATTEMPTS) {
-                console.log('Reached maximum number of attempts. Stopping...');
-              }
+            if (hasBlockingLabel) {
+              console.log('❌ PR has blocking labels');
+              core.setOutput('shouldMerge', 'false');
+            } else {
+              console.log('✅ No blocking labels found');
+              core.setOutput('shouldMerge', 'true');
             }
 
-            return waitForChecks();
-          github-token: ${{github.token}}
+            return !hasBlockingLabel;
 
-      - name: Merge Composer auto update PRs
-        if: steps.title-check.outputs.shouldMerge == 'true'
+      - name: Wait for checks to complete
+        if: steps.title-check.outputs.shouldMerge == 'true' && steps.label-check.outputs.shouldMerge == 'true'
+        id: wait-checks
         uses: actions/github-script@v7
         env:
-          GITHUB_TOKEN: ${{secrets.PAT_FOR_GITHUB_ACTIONS}}
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
         with:
-          result-encoding: string
           script: |
-            github.rest.pulls.createReview({
-              owner: context.payload.repository.owner.login,
-              repo: context.payload.repository.name,
-              pull_number: context.payload.pull_request.number,
-              event: 'APPROVE'
-            }).then(() => {
-              github.rest.pulls.listReviews({
-                owner: context.payload.repository.owner.login,
-                repo: context.payload.repository.name,
-                pull_number: context.payload.pull_request.number
-              }).then((reviews) => {
-                const approvingReviews = reviews.data.filter(review => review.state === 'APPROVED')
-                if (approvingReviews.length > 0) {
-                  github.rest.pulls.merge({
-                    owner: context.payload.repository.owner.login,
-                    repo: context.payload.repository.name,
-                    pull_number: context.payload.pull_request.number,
-                    merge_method: 'squash',
-                    commit_title: context.payload.pull_request.title
-                  })
+            const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const MAX_WAIT_MINUTES = ${{ inputs.max_wait_minutes }};
+            const MAX_ATTEMPTS = MAX_WAIT_MINUTES * 6; // Check every 10 seconds
+            const REQUIRED_CHECKS = '${{ inputs.required_checks }}'.split(',').map(c => c.trim()).filter(c => c);
+
+            console.log(`Waiting for checks to complete (max ${MAX_WAIT_MINUTES} minutes)`);
+            console.log('Required checks:', REQUIRED_CHECKS.length > 0 ? REQUIRED_CHECKS : 'All checks');
+
+            async function waitForChecks() {
+              let attempts = 0;
+
+              while (attempts < MAX_ATTEMPTS) {
+                try {
+                  // Get all checks for this PR
+                  const checksResponse = await github.rest.checks.listForRef({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ref: context.payload.pull_request.head.sha
+                  });
+
+                  // Get all status checks as well
+                  const statusResponse = await github.rest.repos.getCombinedStatusForRef({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ref: context.payload.pull_request.head.sha
+                  });
+
+                  const allChecks = checksResponse.data.check_runs;
+                  const allStatuses = statusResponse.data.statuses;
+
+                  console.log(`Found ${allChecks.length} checks and ${allStatuses.length} statuses`);
+
+                  // Filter checks (exclude automerge/auto-merge related checks)
+                  const relevantChecks = allChecks.filter(check => {
+                    const isAutomergeCheck = check.name.toLowerCase().includes('automerge') ||
+                                           check.name.toLowerCase().includes('auto-merge') ||
+                                           check.name.toLowerCase().includes('merge');
+                    return !isAutomergeCheck;
+                  });
+
+                  const relevantStatuses = allStatuses.filter(status => {
+                    const isAutomergeStatus = status.context.toLowerCase().includes('automerge') ||
+                                            status.context.toLowerCase().includes('auto-merge');
+                    return !isAutomergeStatus;
+                  });
+
+                  // If specific checks are required, only wait for those
+                  let checksToWaitFor = relevantChecks;
+                  let statusesToWaitFor = relevantStatuses;
+
+                  if (REQUIRED_CHECKS.length > 0) {
+                    checksToWaitFor = relevantChecks.filter(check =>
+                      REQUIRED_CHECKS.includes(check.name)
+                    );
+                    statusesToWaitFor = relevantStatuses.filter(status =>
+                      REQUIRED_CHECKS.includes(status.context)
+                    );
+                  }
+
+                  // Check if all required checks are completed and successful
+                  const pendingChecks = checksToWaitFor.filter(check =>
+                    check.status !== 'completed' || check.conclusion === 'failure'
+                  );
+
+                  const pendingStatuses = statusesToWaitFor.filter(status =>
+                    status.state === 'pending' || status.state === 'failure'
+                  );
+
+                  console.log(`Pending checks: ${pendingChecks.length}, Pending statuses: ${pendingStatuses.length}`);
+
+                  if (pendingChecks.length === 0 && pendingStatuses.length === 0) {
+                    console.log('✅ All required checks completed successfully');
+                    return true;
+                  }
+
+                  // Log what we're waiting for
+                  if (pendingChecks.length > 0) {
+                    console.log('Waiting for checks:', pendingChecks.map(c => `${c.name} (${c.status})`).join(', '));
+                  }
+                  if (pendingStatuses.length > 0) {
+                    console.log('Waiting for statuses:', pendingStatuses.map(s => `${s.context} (${s.state})`).join(', '));
+                  }
+
+                  await wait(10000); // Wait 10 seconds
+                  attempts++;
+
+                } catch (error) {
+                  console.log('Error checking status:', error.message);
+                  attempts++;
+                  await wait(10000);
                 }
-              })
-            })
-          github-token: ${{github.token}}
+              }
+
+              if (attempts >= MAX_ATTEMPTS) {
+                console.log(`❌ Timeout after ${MAX_WAIT_MINUTES} minutes`);
+                return false;
+              }
+
+              return true;
+            }
+
+            const success = await waitForChecks();
+            core.setOutput('checksCompleted', success);
+            return success;
+
+      - name: Approve and merge PR
+        if: |
+          steps.title-check.outputs.shouldMerge == 'true' &&
+          steps.label-check.outputs.shouldMerge == 'true' &&
+          steps.wait-checks.outputs.checksCompleted == 'true'
+        uses: actions/github-script@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const mergeMethod = '${{ inputs.merge_method }}';
+
+            try {
+              // First, approve the PR
+              console.log('Approving PR...');
+              await github.rest.pulls.createReview({
+                owner,
+                repo,
+                pull_number: prNumber,
+                event: 'APPROVE'
+              });
+
+              // Wait a moment for the approval to register
+              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              // Check if PR is mergeable
+              const prData = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: prNumber
+              });
+
+              if (prData.data.mergeable === false) {
+                throw new Error('PR is not mergeable (conflicts detected)');
+              }
+
+              if (prData.data.merged) {
+                console.log('PR is already merged');
+                return;
+              }
+
+              // Merge the PR
+              console.log(`Merging PR with method: ${mergeMethod}`);
+              const mergeResult = await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: prNumber,
+                merge_method: mergeMethod,
+                commit_title: context.payload.pull_request.title,
+                commit_message: `Automatically merged by workflow\n\nPR: #${prNumber}`
+              });
+
+              if (mergeResult.data.merged) {
+                console.log('✅ PR successfully merged');
+
+                // Add success comment
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  body: `🤖 Successfully auto-merged this PR using ${mergeMethod} method.`
+                });
+              } else {
+                console.log('❌ PR merge failed');
+                throw new Error('Merge operation failed');
+              }
+
+            } catch (error) {
+              console.log('Error during merge process:', error.message);
+
+              // Add failure comment
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: `❌ Auto-merge failed: ${error.message}\n\nManual intervention required.`
+              });
+
+              throw error;
+            }
+
+      - name: Handle merge failure
+        if: failure()
+        uses: actions/github-script@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `🚨 Auto-merge workflow failed. Please check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId}) and merge manually if appropriate.`
+            });
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Auto-merge Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **PR Title Check**: ${{ steps.title-check.outputs.shouldMerge }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Label Check**: ${{ steps.label-check.outputs.shouldMerge || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Checks Completed**: ${{ steps.wait-checks.outputs.checksCompleted || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pattern**: \`${{ inputs.pr_title_pattern }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Merge Method**: ${{ inputs.merge_method }}" >> $GITHUB_STEP_SUMMARY
