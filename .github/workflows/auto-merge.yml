@@ -124,7 +124,8 @@ jobs:
                                            checkName.includes('merge') ||
                                            checkName === 'workflow' ||
                                            checkName.startsWith('automerge ✨') ||
-                                           checkName.includes('/ workflow (');
+                                           checkName.includes('/ workflow') ||
+                                           checkName.includes('translations / workflow');
                     return !isAutomergeCheck;
                   });
 
@@ -136,7 +137,8 @@ jobs:
                                             contextName.includes('merge') ||
                                             contextName === 'workflow' ||
                                             contextName.startsWith('automerge ✨') ||
-                                            contextName.includes('/ workflow (');
+                                            contextName.includes('/ workflow') ||
+                                            contextName.includes('translations / workflow');
                     return !isAutomergeStatus;
                   });
 
