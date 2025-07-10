@@ -173,7 +173,7 @@ jobs:
             const pr = await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `chore(i18n): updates for project ${context.repo.repo}`,
+              title: `chore(i18n): update languages for project ${context.repo.repo}`,
               head: branchName,
               base: baseBranch,
               body: `This PR was automatically created to update the POT file with new translation strings.
