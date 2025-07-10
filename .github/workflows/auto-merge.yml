@@ -117,15 +117,26 @@ jobs:
 
                   // Filter checks (exclude automerge/auto-merge related checks)
                   const relevantChecks = allChecks.filter(check => {
-                    const isAutomergeCheck = check.name.toLowerCase().includes('automerge') ||
-                                           check.name.toLowerCase().includes('auto-merge') ||
-                                           check.name.toLowerCase().includes('merge');
+                    const checkName = check.name.toLowerCase();
+                    const isAutomergeCheck = checkName.includes('automerge') ||
+                                           checkName.includes('auto-merge') ||
+                                           checkName.includes('auto merge') ||
+                                           checkName.includes('merge') ||
+                                           checkName === 'workflow' ||
+                                           checkName.startsWith('automerge ✨') ||
+                                           checkName.includes('/ workflow (');
                     return !isAutomergeCheck;
                   });
 
                   const relevantStatuses = allStatuses.filter(status => {
-                    const isAutomergeStatus = status.context.toLowerCase().includes('automerge') ||
-                                            status.context.toLowerCase().includes('auto-merge');
+                    const contextName = status.context.toLowerCase();
+                    const isAutomergeStatus = contextName.includes('automerge') ||
+                                            contextName.includes('auto-merge') ||
+                                            contextName.includes('auto merge') ||
+                                            contextName.includes('merge') ||
+                                            contextName === 'workflow' ||
+                                            contextName.startsWith('automerge ✨') ||
+                                            contextName.includes('/ workflow (');
                     return !isAutomergeStatus;
                   });
 
