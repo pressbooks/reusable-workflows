@@ -5,23 +5,27 @@ on:
     inputs:
       domain:
         type: string
-        description: 'Text domain for the POT file'
+        description: "Text domain for the POT file"
         required: true
       slug:
         type: string
-        description: 'Project slug'
+        description: "Project slug"
         required: true
       package_name:
         type: string
-        description: 'Package name for the header in the POT file'
+        description: "Package name for the header in the POT file"
         required: true
       headers:
         type: string
-        description: 'Additional headers in JSON format'
+        description: "Additional headers in JSON format"
         required: true
       pull_request_number:
         type: number
-        description: 'Pull request number'
+        description: "Pull request number (optional for direct merges)"
+        required: false
+    secrets:
+      PAT_FOR_GITHUB_ACTIONS:
+        description: "Personal Access Token for GitHub Actions"
         required: true
 
 jobs:
@@ -32,46 +36,208 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
 
-      - name: Get pull request labels
-        id: get_pr_labels
+      - name: Get pull request information
+        id: get_pr_info
         uses: actions/github-script@v7
         with:
           script: |
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: ${{ inputs.pull_request_number }}
-            });
-            const labels = pr.data.labels.map(label => label.name).join(',');
-            console.log('Pull request labels:', labels);
-            core.setOutput('labels', labels);
+            const prNumber = ${{ inputs.pull_request_number || 'null' }};
+
+            if (prNumber && prNumber !== '' && prNumber !== 'null') {
+              // Handle PR-based workflow
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+
+              const labels = pr.data.labels.map(label => label.name).join(',');
+              const headRef = pr.data.head.ref;
+              const headSha = pr.data.head.sha;
+
+              console.log('Pull request labels:', labels);
+              console.log('Head ref:', headRef);
+              console.log('Head SHA:', headSha);
+
+              core.setOutput('labels', labels);
+              core.setOutput('head_ref', headRef);
+              core.setOutput('head_sha', headSha);
+              core.setOutput('is_pr', 'true');
+
+              // Check if this is an autorelease PR
+              const isAutorelease = labels.includes('autorelease');
+              core.setOutput('skip_pot_update', isAutorelease);
+            } else {
+              // Handle direct merge to dev
+              console.log('No PR number provided - handling direct merge');
+              core.setOutput('labels', '');
+              core.setOutput('head_ref', context.ref.replace('refs/heads/', ''));
+              core.setOutput('head_sha', context.sha);
+              core.setOutput('is_pr', 'false');
+              core.setOutput('skip_pot_update', 'false');
+            }
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
 
       - name: Set up PHP
-        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: "8.2"
           tools: wp-cli/wp-cli-bundle
 
+      - name: Checkout branch
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'true'
+        run: |
+          git checkout ${{ steps.get_pr_info.outputs.head_ref }}
+
       - name: Update POT file
-        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
-        run: wp i18n make-pot . languages/${{ github.event.repository.name }}.pot --domain=${{ inputs.domain }} --slug=${{ inputs.slug }} --package-name="${{ inputs.package_name }}" --headers='${{ inputs.headers }}'
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false'
+        run: |
+          mkdir -p languages
+          wp i18n make-pot . languages/${{ github.event.repository.name }}.pot \
+            --domain=${{ inputs.domain }} \
+            --slug=${{ inputs.slug }} \
+            --package-name="${{ inputs.package_name }}" \
+            --headers='${{ inputs.headers }}'
 
       - name: Configure Git
-        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Commit and push .pot file
-        if: contains(steps.get_pr_labels.outputs.labels, 'autorelease') == false
+      - name: Check for changes and commit
+        id: check_changes
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         run: |
-          git checkout ${{ github.head_ref }}
-          git add languages/${{ github.event.repository.name }}.pot
-          git diff --staged --quiet || {
-            git commit --amend --no-edit
-            git push origin ${{ github.head_ref }} --force-with-lease
-          }
+          POT_FILE="languages/${{ github.event.repository.name }}.pot"
+          POT_UPDATED="false"
+
+          # Check if POT file exists and has meaningful changes (not just timestamps)
+          if [ -f "$POT_FILE" ]; then
+            # Remove timestamp-related headers from both files for comparison
+            git show HEAD:"$POT_FILE" 2>/dev/null | sed '/^"POT-Creation-Date:/d; /^"PO-Revision-Date:/d' > "${POT_FILE}.old" || touch "${POT_FILE}.old"
+            sed '/^"POT-Creation-Date:/d; /^"PO-Revision-Date:/d' "$POT_FILE" > "${POT_FILE}.new"
+
+            # Compare the files without timestamp headers
+            if diff -q "${POT_FILE}.old" "${POT_FILE}.new" > /dev/null 2>&1; then
+              echo "POT file has only timestamp changes, skipping PR creation"
+              POT_UPDATED="false"
+              rm -f "${POT_FILE}.old" "${POT_FILE}.new"
+            else
+              echo "POT file has meaningful changes (new/updated strings)"
+              POT_UPDATED="true"
+              rm -f "${POT_FILE}.old" "${POT_FILE}.new"
+              git add "$POT_FILE"
+            fi
+          else
+            echo "POT file doesn't exist, creating new one"
+            POT_UPDATED="true"
+            git add "$POT_FILE"
+          fi
+
+          echo "pot_updated=${POT_UPDATED}" >> $GITHUB_OUTPUT
+
+          # Only commit if there are meaningful changes
+          if [[ "$POT_UPDATED" == "true" ]]; then
+            if [[ "${{ steps.get_pr_info.outputs.is_pr }}" == "true" ]]; then
+              echo "Committing to PR branch..."
+
+              # Get the latest commit message
+              LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+
+              # Check if the last commit was already a POT update
+              if [[ "$LAST_COMMIT_MSG" == *"Update POT file"* ]]; then
+                echo "Amending existing POT update commit"
+                git commit --amend --no-edit
+              else
+                echo "Creating new POT update commit"
+                git commit -m "chore: update POT file for translations"
+              fi
+
+              git push origin ${{ steps.get_pr_info.outputs.head_ref }} --force-with-lease
+            else
+              echo "Direct merge detected - will create PR for POT updates"
+              git stash push -m "POT file updates"
+            fi
+          fi
+
+      - name: Create PR for POT updates
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'false' && steps.check_changes.outputs.pot_updated == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branchName = `pot-updates-${Date.now()}`;
+            const baseBranch = '${{ steps.get_pr_info.outputs.head_ref }}';
+
+            // Create a new branch for the POT updates
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/heads/${branchName}`,
+              sha: context.sha
+            });
+
+            // Apply the stashed changes to the new branch
+            const { execSync } = require('child_process');
+            execSync(`git fetch origin`);
+            execSync(`git checkout -b ${branchName} origin/${branchName}`);
+            execSync(`git stash pop`);
+            execSync(`git add languages/${context.repo.repo}.pot`);
+            execSync(`git commit -m "Update POT file for translations"`);
+            execSync(`git push origin ${branchName}`);
+
+            // Create the pull request
+            const pr = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `chore(i18n): update languages for project ${context.repo.repo}`,
+              head: branchName,
+              base: baseBranch,
+              body: `This PR was automatically created to update the POT file with new translation strings.
+
+              The POT file has been updated following a direct merge to the ${baseBranch} branch.
+
+              🤖 Generated by GitHub Actions`
+            });
+
+            console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
+
+            // Add a label to the PR
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.data.number,
+              labels: ['translations', 'auto-generated']
+            });
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+
+      - name: Add comment to PR
+        if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Check if POT file was updated
+            const { execSync } = require('child_process');
+
+            try {
+              const potPath = `languages/${context.repo.repo}.pot`;
+              const result = execSync(`git log -1 --name-only --pretty=format: | grep -q "${potPath}" && echo "updated" || echo "no_changes"`, { encoding: 'utf8' }).trim();
+
+              if (result === 'updated') {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: ${{ inputs.pull_request_number }},
+                  body: '🌐 POT file has been automatically updated for translations.'
+                });
+              }
+            } catch (error) {
+              console.log('Could not determine POT file status or add comment:', error.message);
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
