@@ -52,6 +52,7 @@ jobs:
             experimental: true
 
     name: PHP ${{ matrix.php }} - WP ${{ matrix.wordpress }} - ${{ (inputs.use_mariadb) && 'MariaDB' || 'MySQL' }}
+    continue-on-error: ${{ matrix.experimental == true }}
 
     steps:
       - name: Checkout code
