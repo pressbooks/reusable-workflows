@@ -40,7 +40,7 @@ jobs:
 
       - name: Get pull request information
         id: get_pr_info
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const prNumber = ${{ inputs.pull_request_number || 'null' }};
@@ -167,7 +167,7 @@ jobs:
 
       - name: Create or update PR for POT updates
         if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'false' && steps.check_changes.outputs.pot_updated == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const baseBranch = '${{ steps.get_pr_info.outputs.head_ref }}';
@@ -265,7 +265,7 @@ jobs:
 
       - name: Add comment to PR
         if: steps.get_pr_info.outputs.skip_pot_update == 'false' && steps.get_pr_info.outputs.is_pr == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // Check if POT file was updated
