@@ -30,10 +30,10 @@ on:
 
 jobs:
   update-pot:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
@@ -85,7 +85,7 @@ jobs:
         if: steps.get_pr_info.outputs.skip_pot_update == 'false'
         uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.2"
+          php-version: "8.3"
           tools: wp-cli/wp-cli-bundle
 
       - name: Checkout branch
@@ -145,23 +145,11 @@ jobs:
           if [[ "$POT_UPDATED" == "true" ]]; then
             if [[ "${{ steps.get_pr_info.outputs.is_pr }}" == "true" ]]; then
               echo "Committing to PR branch..."
-
-              # Get the latest commit message
-              LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
-
-              # Check if the last commit was already a POT update
-              if [[ "$LAST_COMMIT_MSG" == *"Update POT file"* ]] || [[ "$LAST_COMMIT_MSG" == *"update POT file"* ]]; then
-                echo "Amending existing POT update commit"
-                git commit --amend --no-edit
-              else
-                echo "Creating new POT update commit"
-                git commit -m "chore: update POT file for translations"
-              fi
-
+              git commit -m "chore: update POT file for translations"
               git push origin ${{ steps.get_pr_info.outputs.head_ref }} --force-with-lease
             else
-              echo "Direct merge detected - will create PR for POT updates"
-              git stash push -m "POT file updates"
+              echo "Direct merge detected - saving POT file for PR creation"
+              cp "$POT_FILE" /tmp/pot-update.pot
             fi
           fi
 
@@ -171,10 +159,21 @@ jobs:
         with:
           script: |
             const baseBranch = '${{ steps.get_pr_info.outputs.head_ref }}';
-            const branchName = `pot-updates-${context.repo.repo}`; // Fixed branch name instead of timestamp
+            const branchName = `pot-updates-${context.repo.repo}`;
+            const potFile = `languages/${context.repo.repo}.pot`;
             const { execSync } = require('child_process');
 
-            // Check if there's already an open PR for POT updates
+            const run = (cmd) => {
+              console.log(`> ${cmd}`);
+              return execSync(cmd, { encoding: 'utf8' }).trim();
+            };
+
+            // 1. Ensure a clean working tree before any branch operations
+            run('git reset --hard');
+            run('git clean -fd');
+            run('git fetch origin');
+
+            // 2. Check if there's already an open PR for POT updates
             const existingPRs = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -183,82 +182,62 @@ jobs:
               base: baseBranch
             });
 
-            let prExists = existingPRs.data.length > 0;
-            let pr;
+            const prExists = existingPRs.data.length > 0;
 
             if (prExists) {
-              console.log(`Found existing PR for POT updates: #${existingPRs.data[0].number}`);
-              pr = existingPRs.data[0];
-              
-              // Update existing branch with new changes
-              try {
-                execSync(`git fetch origin`);
-                execSync(`git checkout ${branchName} || git checkout -b ${branchName} origin/${branchName}`);
-                execSync(`git stash pop`);
-                execSync(`git add languages/${context.repo.repo}.pot`);
-                
-                // Check if there are any changes to commit
-                const hasChanges = execSync(`git diff --cached --quiet || echo "has_changes"`, { encoding: 'utf8' }).trim();
-                
-                if (hasChanges === 'has_changes') {
-                  execSync(`git commit -m "chore: update POT file for translations"`);
-                  execSync(`git push origin ${branchName} --force-with-lease`);
-                  console.log(`Updated existing PR #${pr.number} with new POT changes`);
-                } else {
-                  console.log('No changes to commit to existing PR');
-                }
-              } catch (error) {
-                console.log('Error updating existing PR:', error.message);
-                // If updating fails, we'll create a new PR below
-                prExists = false;
-              }
+              console.log(`Found existing PR #${existingPRs.data[0].number} - updating branch`);
+              // Checkout existing remote branch, resetting local to match remote
+              run(`git checkout -B ${branchName} origin/${branchName}`);
+            } else {
+              console.log('No existing PR found - creating new branch from current HEAD');
+              // Create a fresh branch from the base branch
+              run(`git checkout -B ${branchName}`);
             }
 
+            // 3. Copy the saved POT file into place
+            run('mkdir -p languages');
+            run(`cp /tmp/pot-update.pot ${potFile}`);
+            run(`git add ${potFile}`);
+
+            // 4. Check if there are actual changes to commit
+            const hasChanges = run('git diff --cached --quiet || echo "has_changes"');
+            if (hasChanges !== 'has_changes') {
+              console.log('No changes to commit - POT file is identical to what is already on the branch');
+              return;
+            }
+
+            // 5. Commit and force push
+            run('git commit -m "chore: update POT file for translations"');
+            run(`git push origin ${branchName} --force`);
+            console.log(`Pushed changes to ${branchName}`);
+
+            // 6. Create PR if one doesn't already exist
             if (!prExists) {
-              try {
-                // Create a new branch for the POT updates
-                await github.rest.git.createRef({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  ref: `refs/heads/${branchName}`,
-                  sha: context.sha
-                });
-              } catch (error) {
-                // Branch might already exist, try to use it
-                console.log('Branch might already exist, continuing...');
-              }
-
-              // Apply the stashed changes to the branch
-              execSync(`git fetch origin`);
-              execSync(`git checkout ${branchName} || git checkout -b ${branchName}`);
-              execSync(`git stash pop`);
-              execSync(`git add languages/${context.repo.repo}.pot`);
-              execSync(`git commit -m "chore: update POT file for translations"`);
-              execSync(`git push origin ${branchName} --force`);
-
-              // Create the pull request
-              pr = await github.rest.pulls.create({
+              const pr = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: `chore(i18n): update POT file for translations`,
+                title: 'chore(i18n): update POT file for translations',
                 head: branchName,
                 base: baseBranch,
-                body: `This PR was automatically created to update the POT file with new translation strings.
-
-                      The POT file has been updated following changes to the ${baseBranch} branch.
-
-                      🤖 Generated by GitHub Actions`
+                body: [
+                  'This PR was automatically created to update the POT file with new translation strings.',
+                  '',
+                  `The POT file has been updated following changes to the \`${baseBranch}\` branch.`,
+                  '',
+                  '_Generated by GitHub Actions_'
+                ].join('\n')
               });
 
               console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
 
-              // Add a label to the PR
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.data.number,
                 labels: ['translations', 'auto-generated']
               });
+            } else {
+              console.log(`Updated existing PR #${existingPRs.data[0].number}`);
             }
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}

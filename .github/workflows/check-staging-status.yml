@@ -4,37 +4,37 @@ on:
   workflow_call:
     inputs:
       base_branch:
-        description: 'The base branch to compare against (default: production)'
+        description: "The base branch to compare against (default: production)"
         required: false
         type: string
-        default: 'production'
+        default: "production"
       staging_branch:
-        description: 'The staging branch to verify compatibility with (default: staging)'
+        description: "The staging branch to verify compatibility with (default: staging)"
         required: false
         type: string
-        default: 'staging'
+        default: "staging"
       dependency_file:
-        description: 'The dependency file to check (default: composer.json)'
+        description: "The dependency file to check (default: composer.json)"
         required: false
         type: string
-        default: 'composer.json'
+        default: "composer.json"
       lock_file:
-        description: 'The lock file to check (default: composer.lock)'
+        description: "The lock file to check (default: composer.lock)"
         required: false
         type: string
-        default: 'composer.lock'
+        default: "composer.lock"
 
 jobs:
   check-dependencies:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Checkout base branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.base_branch }}
           path: base-branch
@@ -66,7 +66,7 @@ jobs:
           for package in $pr_packages; do
             pr_version=$(jq -r ".require[\"$package\"]" ${{ inputs.dependency_file }})
             base_version=$(jq -r ".require[\"$package\"]" base-branch/${{ inputs.dependency_file }})
-          
+
             if [ "$pr_version" != "$base_version" ]; then
               changed_packages="$changed_packages $package"
             fi
@@ -101,14 +101,14 @@ jobs:
 
           # Convert space-separated list into array
           IFS=' ' read -ra PACKAGES <<< "${{ env.changed_packages }}"
-          
+
           mismatched=""
           for package in "${PACKAGES[@]}"; do
             # Skip empty elements
             if [ -z "$package" ]; then
               continue
             fi
-          
+
             pr_version=$(jq -r ".require[\"$package\"]" ${{ inputs.dependency_file }})
             staging_version=$(jq -r ".require[\"$package\"]" staging-branch/${{ inputs.dependency_file }})
 
@@ -139,7 +139,7 @@ jobs:
           for package in $pr_lock_packages; do
             pr_version=$(jq -r ".packages[] | select(.name == \"$package\") | .version" ${{ inputs.lock_file }})
             base_version=$(jq -r ".packages[] | select(.name == \"$package\") | .version" base-branch/${{ inputs.lock_file }})
-          
+
             if [ "$pr_version" != "$base_version" ]; then
               changed_lock_packages="$changed_lock_packages $package"
             fi
@@ -168,14 +168,14 @@ jobs:
 
           # Convert space-separated list into array
           IFS=' ' read -ra LOCK_PACKAGES <<< "${{ env.changed_lock_packages }}"
-          
+
           mismatched_lock=""
           for package in "${LOCK_PACKAGES[@]}"; do
             # Skip empty elements
             if [ -z "$package" ]; then
               continue
             fi
-          
+
             pr_version=$(jq -r ".packages[] | select(.name == \"$package\") | .version" ${{ inputs.lock_file }})
             staging_version=$(jq -r ".packages[] | select(.name == \"$package\") | .version" staging-branch/${{ inputs.lock_file }})
 
