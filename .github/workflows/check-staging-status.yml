@@ -40,7 +40,7 @@ jobs:
           path: base-branch
 
       - name: Checkout staging branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.staging_branch }}
           path: staging-branch
