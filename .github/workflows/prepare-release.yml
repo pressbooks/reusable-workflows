@@ -9,9 +9,9 @@ permissions:
 
 jobs:
   release-please:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: googleapis/release-please-action@v4
         id: release
         with:
@@ -19,7 +19,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.2
+          php-version: 8.3
           tools: composer
       - name: Set Environment Variables
         if: ${{ steps.release.outputs.release_created }}
@@ -51,8 +51,8 @@ jobs:
       - name: Extract GitHub Repo Name
         id: repo_name
         run: |
-            REPO_NAME=$(echo "${{ github.repository }}" | awk -F'/' '{print $2}')
-            echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+          REPO_NAME=$(echo "${{ github.repository }}" | awk -F'/' '{print $2}')
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
       - name: Get latest release info
         if: ${{ steps.release.outputs.release_created }}
         id: get_release
@@ -78,7 +78,7 @@ jobs:
             | sed -E 's/^## (.*)/*\1*/g' \
             | sed 's/^* /• /' \
             | sed -E 's/\[(.*)\]\((https?:\/\/[^)]+)\)/<\2|\1>/g')
-          
+
           # Store it in environment variables
           echo "FORMATTED_NOTES<<EOF" >> $GITHUB_ENV
           echo "$FORMATTED_NOTES" >> $GITHUB_ENV
