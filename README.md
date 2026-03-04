@@ -38,6 +38,10 @@ This reusable workflow would run the `composer update` when a dependency within 
 
 This reusable workflow would run the desired test matrix for a plugin repository.
 
+* crowdin.yml
+
+This reusable workflow syncs translations with Crowdin. It supports three actions: `upload` (push source POT files), `download` (pull translations, compile MO files, and create a PR), and `seed` (one-time upload of both sources and existing translations to bootstrap a Crowdin project). Supports both open-source and private projects via a `project_type` input. Each repo uses its own Crowdin branch name for isolation.
+
 ### Restrictions and behaviors for the source repository
 
 Note the following restrictions and behaviors for the source repository and workflow:
