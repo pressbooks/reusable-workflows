@@ -32,6 +32,7 @@ on:
 
 jobs:
   upload-sources:
+    name: Upload Sources
     runs-on: ubuntu-latest
     if: inputs.action == 'upload'
 
@@ -54,6 +55,7 @@ jobs:
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_API_SECRET }}
 
   seed-translations:
+    name: Seed Translations
     runs-on: ubuntu-latest
     if: inputs.action == 'seed'
 
@@ -77,6 +79,7 @@ jobs:
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_API_SECRET }}
 
   download-translations:
+    name: Pull Translations
     runs-on: ubuntu-latest
     if: inputs.action == 'download'
 
