@@ -3,40 +3,29 @@ name: Product Owner Dashboard
 on:
   workflow_call:
     inputs:
-      target_repos:
-        description: 'Comma-separated list of repos to monitor (e.g., repo1,repo2,repo3) or "all" for all org repos'
+      project_number:
+        description: 'GitHub Project V2 number to monitor'
+        type: number
+        required: true
+      project_statuses:
+        description: 'Comma-separated list of project statuses to track (e.g., "Needs Review,New Issues")'
         type: string
         required: false
-        default: 'all'
+        default: 'Needs Review,New Issues'
+      review_label:
+        description: 'Label to search for across repos (e.g., needs-review)'
+        type: string
+        required: false
+        default: 'needs-review'
       assignee_username:
         description: 'GitHub username to track assignments for'
         type: string
         required: true
-      review_label:
-        description: 'Label to search for in triage'
-        type: string
-        required: false
-        default: 'needs-review'
-      lookback_days:
-        description: 'Days to look back for new issues'
-        type: number
-        required: false
-        default: 7
       create_dashboard_issue:
         description: 'Create or update a dashboard tracking issue'
         type: boolean
         required: false
         default: true
-      include_prs:
-        description: 'Include pull requests in tracking'
-        type: boolean
-        required: false
-        default: true
-      max_items_per_repo:
-        description: 'Maximum items to report per repository'
-        type: number
-        required: false
-        default: 20
       dry_run:
         description: 'Run in dry-run mode'
         type: boolean
@@ -62,186 +51,235 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const assignee = '${{ inputs.assignee_username }}';
+            const projectNumber = ${{ inputs.project_number }};
+            const statuses = '${{ inputs.project_statuses }}'.split(',').map(s => s.trim());
             const reviewLabel = '${{ inputs.review_label }}';
-            const lookbackDays = ${{ inputs.lookback_days }};
+            const assignee = '${{ inputs.assignee_username }}';
             const dryRun = ${{ inputs.dry_run }};
-            const targetRepos = '${{ inputs.target_repos }}';
-            const includePRs = ${{ inputs.include_prs }};
-            const maxPerRepo = ${{ inputs.max_items_per_repo }};
             const owner = context.repo.owner;
-            
-            const since = new Date();
-            since.setDate(since.getDate() - lookbackDays);
-            
-            let repos = [];
-            
-            if (targetRepos === 'all') {
-              repos = await github.paginate(github.rest.repos.listForOrg, {
+
+            console.log('Project number: ' + projectNumber);
+            console.log('Tracking statuses: ' + statuses.join(', '));
+            console.log('Review label: ' + reviewLabel);
+            console.log('Assignee: ' + assignee);
+
+            // Query project items with status and content using GraphQL
+            const projectItems = [];
+            let hasNextPage = true;
+            let cursor = null;
+
+            while (hasNextPage) {
+              const query = `
+                query($org: String!, $number: Int!, $cursor: String) {
+                  organization(login: $org) {
+                    projectV2(number: $number) {
+                      title
+                      items(first: 100, after: $cursor) {
+                        pageInfo {
+                          hasNextPage
+                          endCursor
+                        }
+                        nodes {
+                          id
+                          content {
+                            ... on Issue {
+                              number
+                              title
+                              url
+                              state
+                              createdAt
+                              updatedAt
+                              assignees(first: 10) {
+                                nodes { login }
+                              }
+                              labels(first: 10) {
+                                nodes { name }
+                              }
+                              repository {
+                                name
+                              }
+                            }
+                            ... on PullRequest {
+                              number
+                              title
+                              url
+                              state
+                              createdAt
+                              updatedAt
+                              assignees(first: 10) {
+                                nodes { login }
+                              }
+                              labels(first: 10) {
+                                nodes { name }
+                              }
+                              repository {
+                                name
+                              }
+                            }
+                          }
+                          status: fieldValueByName(name: "Status") {
+                            ... on ProjectV2ItemFieldSingleSelectValue {
+                              name
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              `;
+
+              const result = await github.graphql(query, {
                 org: owner,
-                type: 'all',
-                per_page: 100
+                number: projectNumber,
+                cursor: cursor
               });
-            } else {
-              const repoNames = targetRepos.split(',').map(r => r.trim());
-              for (const repoName of repoNames) {
-                try {
-                  const repo = await github.rest.repos.get({ owner: owner, repo: repoName });
-                  repos.push(repo.data);
-                } catch (e) {
-                  console.warn('Could not fetch repo ' + repoName + ': ' + e.message);
-                }
-              }
+
+              const project = result.organization.projectV2;
+              const items = project.items;
+
+              projectItems.push(...items.nodes);
+              hasNextPage = items.pageInfo.hasNextPage;
+              cursor = items.pageInfo.endCursor;
             }
-            
-            console.log('Monitoring ' + repos.length + ' repositories');
-            
+
+            console.log('Total project items fetched: ' + projectItems.length);
+
+            // Categorize items
             const dashboard = {
-              needsReview: [],
-              assignments: [],
-              summary: { totalNeedsReview: 0, totalAssignments: 0, reposWithNeedsReview: 0, reposWithAssignments: 0 }
+              byStatus: {},
+              labeledItems: [],
+              summary: {
+                totalTracked: 0,
+                byStatus: {},
+                labeledCount: 0
+              }
             };
-            
-            for (const repo of repos) {
-              console.log('Processing ' + repo.name + '...');
-              
-              try {
-                const reviewIssues = await github.paginate(github.rest.issues.listForRepo, {
-                  owner: owner,
-                  repo: repo.name,
-                  labels: reviewLabel,
-                  state: 'open',
-                  since: since.toISOString(),
-                  per_page: maxPerRepo
-                });
-                
-                const filteredReview = reviewIssues.filter(i => !i.pull_request);
-                
-                if (filteredReview.length > 0) {
-                  dashboard.summary.totalNeedsReview += filteredReview.length;
-                  dashboard.summary.reposWithNeedsReview++;
-                  
-                  for (const issue of filteredReview) {
-                    dashboard.needsReview.push({
-                      repo: repo.name,
-                      number: issue.number,
-                      title: issue.title,
-                      url: issue.html_url,
-                      created_at: issue.created_at,
-                      days_ago: Math.floor((Date.now() - new Date(issue.created_at)) / (1000 * 60 * 60 * 24)),
-                      labels: issue.labels.map(l => l.name)
-                    });
-                  }
-                }
-                
-                const assignments = await github.paginate(github.rest.issues.listForRepo, {
-                  owner: owner,
-                  repo: repo.name,
-                  assignee: assignee,
-                  state: 'open',
-                  per_page: maxPerRepo
-                });
-                
-                const filteredAssignments = includePRs ? assignments : assignments.filter(i => !i.pull_request);
-                
-                if (filteredAssignments.length > 0) {
-                  dashboard.summary.totalAssignments += filteredAssignments.length;
-                  dashboard.summary.reposWithAssignments++;
-                  
-                  for (const issue of filteredAssignments) {
-                    dashboard.assignments.push({
-                      repo: repo.name,
-                      number: issue.number,
-                      title: issue.title,
-                      url: issue.html_url,
-                      type: issue.pull_request ? 'PR' : 'Issue',
-                      created_at: issue.created_at,
-                      updated_at: issue.updated_at,
-                      days_open: Math.floor((Date.now() - new Date(issue.created_at)) / (1000 * 60 * 60 * 24)),
-                      labels: issue.labels.map(l => l.name)
-                    });
-                  }
-                }
-              } catch (error) {
-                console.warn('Error processing ' + repo.name + ': ' + error.message);
+
+            // Initialize status buckets
+            statuses.forEach(s => {
+              dashboard.byStatus[s] = [];
+              dashboard.summary.byStatus[s] = 0;
+            });
+
+            const now = new Date();
+
+            for (const item of projectItems) {
+              if (!item.content || !item.content.number) continue;
+
+              const statusName = item.status && item.status.name ? item.status.name : null;
+              const content = item.content;
+              const daysOpen = Math.floor((now - new Date(content.createdAt)) / (1000 * 60 * 60 * 24));
+              const daysSinceUpdate = Math.floor((now - new Date(content.updatedAt)) / (1000 * 60 * 60 * 24));
+              const labels = content.labels ? content.labels.nodes.map(l => l.name) : [];
+              const assignees = content.assignees ? content.assignees.nodes.map(a => a.login) : [];
+              const repo = content.repository ? content.repository.name : 'unknown';
+              const isPR = content.url && content.url.includes('/pull/');
+
+              const entry = {
+                repo: repo,
+                number: content.number,
+                title: content.title,
+                url: content.url,
+                state: content.state,
+                type: isPR ? 'PR' : 'Issue',
+                status: statusName,
+                days_open: daysOpen,
+                days_since_update: daysSinceUpdate,
+                labels: labels,
+                assignees: assignees
+              };
+
+              // Match by project status
+              if (statusName && statuses.includes(statusName)) {
+                dashboard.byStatus[statusName].push(entry);
+                dashboard.summary.byStatus[statusName]++;
+                dashboard.summary.totalTracked++;
+              }
+
+              // Match by label
+              if (labels.includes(reviewLabel)) {
+                dashboard.labeledItems.push(entry);
+                dashboard.summary.labeledCount++;
               }
             }
-            
-            dashboard.needsReview.sort((a, b) => a.days_ago - b.days_ago);
-            dashboard.assignments.sort((a, b) => b.days_open - a.days_open);
-            
+
+            // Generate report
             const reportLines = [];
-            const now = new Date();
-            
+
             reportLines.push('# Product Owner Dashboard');
             reportLines.push('');
             reportLines.push('**Generated:** ' + now.toLocaleString());
-            reportLines.push('**Monitored Repos:** ' + repos.length);
+            reportLines.push('**Project:** #' + projectNumber);
             reportLines.push('**Assignee:** @' + assignee);
             reportLines.push('');
+
+            // Summary
             reportLines.push('## Summary');
             reportLines.push('');
-            reportLines.push('- **Needs Review:** ' + dashboard.summary.totalNeedsReview + ' issues in ' + dashboard.summary.reposWithNeedsReview + ' repos');
-            reportLines.push('- **Your Assignments:** ' + dashboard.summary.totalAssignments + ' items in ' + dashboard.summary.reposWithAssignments + ' repos');
+            for (const [status, count] of Object.entries(dashboard.summary.byStatus)) {
+              reportLines.push('- **' + status + ':** ' + count + ' items');
+            }
+            reportLines.push('- **Labeled `' + reviewLabel + '`:** ' + dashboard.summary.labeledCount + ' items');
             reportLines.push('');
-            reportLines.push('## Needs Review (' + dashboard.summary.totalNeedsReview + ')');
-            reportLines.push('');
-            reportLines.push('Issues with ' + reviewLabel + ' label opened in the last ' + lookbackDays + ' days:');
-            reportLines.push('');
-            
-            if (dashboard.needsReview.length === 0) {
-              reportLines.push('*No issues requiring review*');
-            } else {
-              dashboard.needsReview.forEach(item => {
-                reportLines.push('- [' + item.repo + '] #' + item.number + ': ' + item.title);
+
+            // Section per status
+            for (const status of statuses) {
+              const items = dashboard.byStatus[status];
+              reportLines.push('## ' + status + ' (' + items.length + ')');
+              reportLines.push('');
+
+              if (items.length === 0) {
+                reportLines.push('*No items*');
+              } else {
+                items.sort((a, b) => b.days_open - a.days_open);
+                items.forEach(item => {
+                  const type = item.type === 'PR' ? 'PR' : 'Issue';
+                  reportLines.push('- **[' + item.repo + ']** #' + item.number + ' (' + type + '): ' + item.title);
+                  reportLines.push('  - ' + item.url);
+                  reportLines.push('  - Open for ' + item.days_open + ' days, last updated ' + item.days_since_update + ' days ago');
+                  reportLines.push('  - Labels: ' + (item.labels.join(', ') || 'none'));
+                  reportLines.push('  - Assignees: ' + (item.assignees.map(a => '@' + a).join(', ') || 'unassigned'));
+                  reportLines.push('');
+                });
+              }
+              reportLines.push('');
+            }
+
+            // Labeled items section (deduplicated from status sections)
+            const labeledOnly = dashboard.labeledItems.filter(item => {
+              return !statuses.includes(item.status);
+            });
+
+            if (labeledOnly.length > 0) {
+              reportLines.push('## Labeled `' + reviewLabel + '` (not in tracked statuses) (' + labeledOnly.length + ')');
+              reportLines.push('');
+              labeledOnly.forEach(item => {
+                reportLines.push('- **[' + item.repo + ']** #' + item.number + ': ' + item.title);
                 reportLines.push('  - ' + item.url);
-                reportLines.push('  - Opened ' + item.days_ago + ' days ago');
+                reportLines.push('  - Status: ' + (item.status || 'none') + ' | Open for ' + item.days_open + ' days');
                 reportLines.push('');
               });
             }
-            
-            reportLines.push('---');
-            reportLines.push('');
-            reportLines.push('## Your Assignments (' + dashboard.summary.totalAssignments + ')');
-            reportLines.push('');
-            reportLines.push('All open issues/PRs assigned to @' + assignee + ':');
-            reportLines.push('');
-            
-            if (dashboard.assignments.length === 0) {
-              reportLines.push('*No open assignments*');
-            } else {
-              dashboard.assignments.forEach(item => {
-                const icon = item.type === 'PR' ? 'PR' : 'Issue';
-                reportLines.push('- [' + item.repo + '] #' + item.number + ' (' + icon + '): ' + item.title);
-                reportLines.push('  - ' + item.url);
-                reportLines.push('  - Open for ' + item.days_open + ' days');
-                reportLines.push('  - Labels: ' + (item.labels.join(', ') || 'none'));
-                reportLines.push('');
-              });
-            }
-            
+
             const reportBody = reportLines.join('\n');
-            
+
+            // Totals for outputs
+            const totalItems = dashboard.summary.totalTracked + labeledOnly.length;
+
             core.setOutput('report_body', reportBody);
-            core.setOutput('needs_review_count', dashboard.summary.totalNeedsReview);
-            core.setOutput('assignments_count', dashboard.summary.totalAssignments);
-            core.setOutput('dashboard_data', JSON.stringify(dashboard));
-            
-            console.log('Dashboard generated successfully');
+            core.setOutput('total_items', totalItems);
+            core.setOutput('dashboard_data', JSON.stringify(dashboard.summary));
+
+            console.log('Dashboard generated: ' + totalItems + ' total items tracked');
 
       - name: Create Dashboard Issue
-        if: inputs.create_dashboard_issue == 'true' && steps.dashboard.outputs.needs_review_count > 0 || steps.dashboard.outputs.assignments_count > 0
+        if: inputs.create_dashboard_issue && steps.dashboard.outputs.total_items > 0 && !inputs.dry_run
         uses: actions/github-script@v7
         with:
           script: |
-            const dryRun = ${{ inputs.dry_run }};
             const reportBody = `${{ steps.dashboard.outputs.report_body }}`;
-            
-            if (dryRun) {
-              console.log('[DRY RUN] Would create/update dashboard issue');
-              return;
-            }
-            
+
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -249,9 +287,9 @@ jobs:
               state: 'open',
               labels: 'po-dashboard'
             });
-            
+
             const dashboardTitle = 'Product Owner Dashboard - ' + new Date().toISOString().split('T')[0];
-            
+
             if (issues.data.length > 0) {
               await github.rest.issues.update({
                 owner: context.repo.owner,
@@ -273,12 +311,12 @@ jobs:
             }
 
       - name: Send Slack Notification
-        if: (steps.dashboard.outputs.needs_review_count > 0 || steps.dashboard.outputs.assignments_count > 0) && env.SLACK_WEBHOOK_URL != ''
+        if: steps.dashboard.outputs.total_items > 0 && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1
         with:
           payload: |
             {
-              "text": "Product Owner Dashboard: ${{ steps.dashboard.outputs.needs_review_count }} need review, ${{ steps.dashboard.outputs.assignments_count }} assignments",
+              "text": "Product Owner Dashboard: ${{ steps.dashboard.outputs.total_items }} items to review",
               "blocks": [
                 {
                   "type": "header",
@@ -288,18 +326,8 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*${{ steps.dashboard.outputs.needs_review_count }}* items need review across *${{ inputs.target_repos }}*\n*${{ steps.dashboard.outputs.assignments_count }}* open assignments for @${{ inputs.assignee_username }}"
+                    "text": "*${{ steps.dashboard.outputs.total_items }}* items need attention in project #${{ inputs.project_number }}\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Full Report>"
                   }
-                },
-                {
-                  "type": "actions",
-                  "elements": [
-                    {
-                      "type": "button",
-                      "text": { "type": "plain_text", "text": "View Full Report" },
-                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                    }
-                  ]
                 }
               ]
             }
@@ -312,8 +340,8 @@ jobs:
         run: |
           echo "### Product Owner Dashboard" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Monitored Repos:** ${{ inputs.target_repos }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Assignee:** @${{ inputs.assignee_username }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Needs Review:** ${{ steps.dashboard.outputs.needs_review_count }} items" >> $GITHUB_STEP_SUMMARY
-          echo "- **Assignments:** ${{ steps.dashboard.outputs.assignments_count }} items" >> $GITHUB_STEP_SUMMARY
+          echo "- **Project:** #${{ inputs.project_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Statuses Tracked:** ${{ inputs.project_statuses }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Review Label:** ${{ inputs.review_label }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Items:** ${{ steps.dashboard.outputs.total_items }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Dry Run:** ${{ inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
