@@ -3,6 +3,10 @@ name: Product Owner Dashboard
 on:
   workflow_call:
     inputs:
+      org_name:
+        description: 'GitHub organization that owns the project'
+        type: string
+        required: true
       project_number:
         description: 'GitHub Project V2 number to monitor'
         type: number
@@ -35,6 +39,9 @@ on:
       slack_webhook_url:
         description: 'Slack webhook URL for notifications'
         required: false
+      gh_token:
+        description: 'GitHub token with org project read access (PAT if repo is outside the org)'
+        required: false
 
 permissions:
   issues: write
@@ -49,14 +56,14 @@ jobs:
         id: dashboard
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.gh_token || secrets.GITHUB_TOKEN }}
           script: |
             const projectNumber = ${{ inputs.project_number }};
             const statuses = '${{ inputs.project_statuses }}'.split(',').map(s => s.trim());
             const reviewLabel = '${{ inputs.review_label }}';
             const assignee = '${{ inputs.assignee_username }}';
             const dryRun = ${{ inputs.dry_run }};
-            const owner = context.repo.owner;
+            const owner = '${{ inputs.org_name }}';
 
             console.log('Project number: ' + projectNumber);
             console.log('Tracking statuses: ' + statuses.join(', '));
