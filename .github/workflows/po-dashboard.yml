@@ -273,7 +273,7 @@ jobs:
             }
 
       - name: Send Slack Notification
-        if: secrets.slack_webhook_url != '' && (steps.dashboard.outputs.needs_review_count > 0 || steps.dashboard.outputs.assignments_count > 0)
+        if: (steps.dashboard.outputs.needs_review_count > 0 || steps.dashboard.outputs.assignments_count > 0) && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1
         with:
           payload: |
