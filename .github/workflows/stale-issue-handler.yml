@@ -1,0 +1,93 @@
+name: Stale Issue Handler
+
+on:
+  workflow_call:
+    inputs:
+      stale_days:
+        description: 'Days of inactivity before marking issues/PRs as stale'
+        type: number
+        required: false
+        default: 90
+      close_days:
+        description: 'Days after stale warning before closing issues/PRs'
+        type: number
+        required: false
+        default: 30
+      stale_label:
+        description: 'Label to apply when marking as stale'
+        type: string
+        required: false
+        default: 'stale'
+      exempt_labels:
+        description: 'Comma-separated list of labels that exempt issues from being marked stale'
+        type: string
+        required: false
+        default: 'pinned,security'
+      stale_message:
+        description: 'Message to post when marking issue as stale'
+        type: string
+        required: false
+        default: |
+          This issue has been automatically marked as stale because it has not had recent activity.
+          
+          It will be closed in 30 days if no further activity occurs.
+          
+          If this issue is still relevant, please add a comment to keep it open.
+      close_message:
+        description: 'Message to post when closing stale issue'
+        type: string
+        required: false
+        default: |
+          This issue has been automatically closed due to inactivity.
+          
+          If you believe this issue is still relevant, please reopen it with a comment explaining why.
+      only_issues:
+        description: 'Only process issues, skip pull requests'
+        type: boolean
+        required: false
+        default: false
+      only_prs:
+        description: 'Only process pull requests, skip issues'
+        type: boolean
+        required: false
+        default: false
+      dry_run:
+        description: 'Run in dry-run mode (no changes will be made)'
+        type: boolean
+        required: false
+        default: false
+      operations_per_run:
+        description: 'Maximum number of operations to perform per run'
+        type: number
+        required: false
+        default: 100
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process stale issues and PRs
+        uses: actions/stale@v9
+        with:
+          days-before-issue-stale: ${{ inputs.stale_days }}
+          days-before-pr-stale: ${{ inputs.stale_days }}
+          days-before-issue-close: ${{ inputs.close_days }}
+          days-before-pr-close: ${{ inputs.close_days }}
+          stale-issue-label: ${{ inputs.stale_label }}
+          stale-pr-label: ${{ inputs.stale_label }}
+          exempt-issue-labels: ${{ inputs.exempt_labels }}
+          exempt-pr-labels: ${{ inputs.exempt_labels }}
+          stale-issue-message: ${{ inputs.stale_message }}
+          stale-pr-message: ${{ inputs.stale_message }}
+          close-issue-message: ${{ inputs.close_message }}
+          close-pr-message: ${{ inputs.close_message }}
+          remove-stale-when-updated: true
+          remove-issue-stale-when-updated: true
+          remove-pr-stale-when-updated: true
+          debug-only: ${{ inputs.dry_run }}
+          operations-per-run: ${{ inputs.operations_per_run }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,313 @@
+name: Product Owner Dashboard
+
+on:
+  workflow_call:
+    inputs:
+      target_repos:
+        description: 'Comma-separated list of repos to monitor (e.g., repo1,repo2,repo3) or "all" for all org repos'
+        type: string
+        required: false
+        default: 'all'
+      assignee_username:
+        description: 'GitHub username to track assignments for'
+        type: string
+        required: true
+      review_label:
+        description: 'Label to search for in triage'
+        type: string
+        required: false
+        default: 'needs-review'
+      lookback_days:
+        description: 'Days to look back for new issues'
+        type: number
+        required: false
+        default: 7
+      slack_webhook_url:
+        description: 'Slack webhook URL for notifications'
+        type: string
+        required: false
+        default: ''
+      create_dashboard_issue:
+        description: 'Create or update a dashboard tracking issue'
+        type: boolean
+        required: false
+        default: true
+      include_prs:
+        description: 'Include pull requests in tracking'
+        type: boolean
+        required: false
+        default: true
+      max_items_per_repo:
+        description: 'Maximum items to report per repository'
+        type: number
+        required: false
+        default: 20
+      dry_run:
+        description: 'Run in dry-run mode'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  issues: write
+  contents: read
+  repository-projects: read
+
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Product Owner Dashboard
+        id: dashboard
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const assignee = '${{ inputs.assignee_username }}';
+            const reviewLabel = '${{ inputs.review_label }}';
+            const lookbackDays = ${{ inputs.lookback_days }};
+            const dryRun = ${{ inputs.dry_run }};
+            const targetRepos = '${{ inputs.target_repos }}';
+            const includePRs = ${{ inputs.include_prs }};
+            const maxPerRepo = ${{ inputs.max_items_per_repo }};
+            const owner = context.repo.owner;
+            
+            const since = new Date();
+            since.setDate(since.getDate() - lookbackDays);
+            
+            let repos = [];
+            
+            if (targetRepos === 'all') {
+              repos = await github.paginate(github.rest.repos.listForOrg, {
+                org: owner,
+                type: 'all',
+                per_page: 100
+              });
+            } else {
+              const repoNames = targetRepos.split(',').map(r => r.trim());
+              for (const repoName of repoNames) {
+                try {
+                  const repo = await github.rest.repos.get({ owner: owner, repo: repoName });
+                  repos.push(repo.data);
+                } catch (e) {
+                  console.warn('Could not fetch repo ' + repoName + ': ' + e.message);
+                }
+              }
+            }
+            
+            console.log('Monitoring ' + repos.length + ' repositories');
+            
+            const dashboard = {
+              needsReview: [],
+              assignments: [],
+              summary: { totalNeedsReview: 0, totalAssignments: 0, reposWithNeedsReview: 0, reposWithAssignments: 0 }
+            };
+            
+            for (const repo of repos) {
+              console.log('Processing ' + repo.name + '...');
+              
+              try {
+                const reviewIssues = await github.paginate(github.rest.issues.listForRepo, {
+                  owner: owner,
+                  repo: repo.name,
+                  labels: reviewLabel,
+                  state: 'open',
+                  since: since.toISOString(),
+                  per_page: maxPerRepo
+                });
+                
+                const filteredReview = reviewIssues.filter(i => !i.pull_request);
+                
+                if (filteredReview.length > 0) {
+                  dashboard.summary.totalNeedsReview += filteredReview.length;
+                  dashboard.summary.reposWithNeedsReview++;
+                  
+                  for (const issue of filteredReview) {
+                    dashboard.needsReview.push({
+                      repo: repo.name,
+                      number: issue.number,
+                      title: issue.title,
+                      url: issue.html_url,
+                      created_at: issue.created_at,
+                      days_ago: Math.floor((Date.now() - new Date(issue.created_at)) / (1000 * 60 * 60 * 24)),
+                      labels: issue.labels.map(l => l.name)
+                    });
+                  }
+                }
+                
+                const assignments = await github.paginate(github.rest.issues.listForRepo, {
+                  owner: owner,
+                  repo: repo.name,
+                  assignee: assignee,
+                  state: 'open',
+                  per_page: maxPerRepo
+                });
+                
+                const filteredAssignments = includePRs ? assignments : assignments.filter(i => !i.pull_request);
+                
+                if (filteredAssignments.length > 0) {
+                  dashboard.summary.totalAssignments += filteredAssignments.length;
+                  dashboard.summary.reposWithAssignments++;
+                  
+                  for (const issue of filteredAssignments) {
+                    dashboard.assignments.push({
+                      repo: repo.name,
+                      number: issue.number,
+                      title: issue.title,
+                      url: issue.html_url,
+                      type: issue.pull_request ? 'PR' : 'Issue',
+                      created_at: issue.created_at,
+                      updated_at: issue.updated_at,
+                      days_open: Math.floor((Date.now() - new Date(issue.created_at)) / (1000 * 60 * 60 * 24)),
+                      labels: issue.labels.map(l => l.name)
+                    });
+                  }
+                }
+              } catch (error) {
+                console.warn('Error processing ' + repo.name + ': ' + error.message);
+              }
+            }
+            
+            dashboard.needsReview.sort((a, b) => a.days_ago - b.days_ago);
+            dashboard.assignments.sort((a, b) => b.days_open - a.days_open);
+            
+            const reportLines = [];
+            const now = new Date();
+            
+            reportLines.push('# Product Owner Dashboard');
+            reportLines.push('');
+            reportLines.push('**Generated:** ' + now.toLocaleString());
+            reportLines.push('**Monitored Repos:** ' + repos.length);
+            reportLines.push('**Assignee:** @' + assignee);
+            reportLines.push('');
+            reportLines.push('## Summary');
+            reportLines.push('');
+            reportLines.push('- **Needs Review:** ' + dashboard.summary.totalNeedsReview + ' issues in ' + dashboard.summary.reposWithNeedsReview + ' repos');
+            reportLines.push('- **Your Assignments:** ' + dashboard.summary.totalAssignments + ' items in ' + dashboard.summary.reposWithAssignments + ' repos');
+            reportLines.push('');
+            reportLines.push('## Needs Review (' + dashboard.summary.totalNeedsReview + ')');
+            reportLines.push('');
+            reportLines.push('Issues with ' + reviewLabel + ' label opened in the last ' + lookbackDays + ' days:');
+            reportLines.push('');
+            
+            if (dashboard.needsReview.length === 0) {
+              reportLines.push('*No issues requiring review*');
+            } else {
+              dashboard.needsReview.forEach(item => {
+                reportLines.push('- [' + item.repo + '] #' + item.number + ': ' + item.title);
+                reportLines.push('  - ' + item.url);
+                reportLines.push('  - Opened ' + item.days_ago + ' days ago');
+                reportLines.push('');
+              });
+            }
+            
+            reportLines.push('---');
+            reportLines.push('');
+            reportLines.push('## Your Assignments (' + dashboard.summary.totalAssignments + ')');
+            reportLines.push('');
+            reportLines.push('All open issues/PRs assigned to @' + assignee + ':');
+            reportLines.push('');
+            
+            if (dashboard.assignments.length === 0) {
+              reportLines.push('*No open assignments*');
+            } else {
+              dashboard.assignments.forEach(item => {
+                const icon = item.type === 'PR' ? 'PR' : 'Issue';
+                reportLines.push('- [' + item.repo + '] #' + item.number + ' (' + icon + '): ' + item.title);
+                reportLines.push('  - ' + item.url);
+                reportLines.push('  - Open for ' + item.days_open + ' days');
+                reportLines.push('  - Labels: ' + (item.labels.join(', ') || 'none'));
+                reportLines.push('');
+              });
+            }
+            
+            const reportBody = reportLines.join('\n');
+            
+            core.setOutput('report_body', reportBody);
+            core.setOutput('needs_review_count', dashboard.summary.totalNeedsReview);
+            core.setOutput('assignments_count', dashboard.summary.totalAssignments);
+            core.setOutput('dashboard_data', JSON.stringify(dashboard));
+            
+            console.log('Dashboard generated successfully');
+
+      - name: Create Dashboard Issue
+        if: inputs.create_dashboard_issue == 'true' && steps.dashboard.outputs.needs_review_count > 0 || steps.dashboard.outputs.assignments_count > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const dryRun = ${{ inputs.dry_run }};
+            const reportBody = `${{ steps.dashboard.outputs.report_body }}`;
+            
+            if (dryRun) {
+              console.log('[DRY RUN] Would create/update dashboard issue');
+              return;
+            }
+            
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              creator: 'github-actions[bot]',
+              state: 'open',
+              labels: 'po-dashboard'
+            });
+            
+            const dashboardTitle = 'Product Owner Dashboard - ' + new Date().toISOString().split('T')[0];
+            
+            if (issues.data.length > 0) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                title: dashboardTitle,
+                body: reportBody
+              });
+              console.log('Updated dashboard issue #' + issues.data[0].number);
+            } else {
+              const newIssue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: dashboardTitle,
+                body: reportBody,
+                labels: ['po-dashboard', 'automated']
+              });
+              console.log('Created dashboard issue #' + newIssue.data.number);
+            }
+
+      - name: Send Slack Notification
+        if: inputs.slack_webhook_url != '' && (steps.dashboard.outputs.needs_review_count > 0 || steps.dashboard.outputs.assignments_count > 0)
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Product Owner Dashboard - ${{ github.repository }}",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "Product Owner Dashboard"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "@${{ inputs.assignee_username }} - Daily Summary\n\n*${{ steps.dashboard.outputs.needs_review_count }}* items need review\n*${{ steps.dashboard.outputs.assignments_count }}* open assignments"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ inputs.slack_webhook_url }}
+        continue-on-error: true
+
+      - name: Workflow Summary
+        if: always()
+        run: |
+          echo "### Product Owner Dashboard" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Monitored Repos:** ${{ inputs.target_repos }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Assignee:** @${{ inputs.assignee_username }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Needs Review:** ${{ steps.dashboard.outputs.needs_review_count }} items" >> $GITHUB_STEP_SUMMARY
+          echo "- **Assignments:** ${{ steps.dashboard.outputs.assignments_count }} items" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run:** ${{ inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
