@@ -22,11 +22,6 @@ on:
         type: number
         required: false
         default: 7
-      slack_webhook_url:
-        description: 'Slack webhook URL for notifications'
-        type: string
-        required: false
-        default: ''
       create_dashboard_issue:
         description: 'Create or update a dashboard tracking issue'
         type: boolean
