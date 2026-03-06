@@ -42,6 +42,14 @@ This reusable workflow would run the desired test matrix for a plugin repository
 
 This reusable workflow syncs translations with Crowdin. It supports three actions: `upload` (push source POT files), `download` (pull translations, compile MO files, and create a PR), and `seed` (one-time upload of both sources and existing translations to bootstrap a Crowdin project). Supports both open-source and private projects via a `project_type` input. Each repo uses its own Crowdin branch name for isolation.
 
+* stale-issue-handler.yml
+
+This reusable workflow automatically manages stale issues and pull requests. It marks items as stale after 90 days of inactivity (configurable), then closes them 30 days later (configurable). You can exempt specific labels, customize messages, and run in dry-run mode for testing.
+
+* po-dashboard.yml
+
+**Recommended for Product Owners:** Centralized dashboard that monitors multiple repositories from a single location. Combines weekly triage tracking (needs-review items) AND assignment tracking across all repos you oversee. Creates a consolidated dashboard issue and sends single Slack notifications. Perfect when you manage many repos and want one unified view.
+
 ### Restrictions and behaviors for the source repository
 
 Note the following restrictions and behaviors for the source repository and workflow:
@@ -64,6 +72,35 @@ Note the following restrictions and behaviors for the source repository and work
 
 ### Further reading
 
-https://docs.github.com/en/actions/using-workflows/required-workflows
-
 https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+## Usage Examples
+
+### Stale Issue Handler
+
+```yaml
+name: StaleBot 🔧
+on:
+  schedule:
+    - cron: '0 1 * * *'  # Daily at 1 AM UTC
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  stale:
+    uses: pressbooks/reusable-workflows/.github/workflows/stale-issue-handler.yml@main
+    with:
+      stale_days: 90
+      close_days: 30
+      stale_label: 'stale'
+      exempt_labels: 'pinned,security,bug'
+      dry_run: false
+```
+
+**Configuration Options:**
+- `stale_days`: Days before marking stale (default: 90)
+- `close_days`: Days after stale before closing (default: 30)
+- `stale_label`: Label applied when stale (default: 'stale')
+- `exempt_labels`: Comma-separated labels to skip (default: 'pinned,security')
+- `only_issues`: Only process issues, skip PRs (default: false)
+- `only_prs`: Only process PRs, skip issues (default: false)
+- `dry_run`: Test mode without making changes (default: false)

@@ -1,0 +1,24 @@
+name: Stale Issues Bot
+
+on:
+  schedule:
+    - cron: "0 1 * * *" # Daily at 1 AM UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run in dry-run mode (no changes)"
+        type: boolean
+        default: true
+
+jobs:
+  stale:
+    uses: pressbooks/reusable-workflows/.github/workflows/stale-issue-handler.yml@main
+    with:
+      stale_days: 90
+      close_days: 30
+      stale_label: "stale"
+      exempt_labels: "pinned,security,bug,enhancement"
+      dry_run: ${{ github.event.inputs.dry_run || false }}
+    permissions:
+      issues: write
+      pull-requests: write
