@@ -278,21 +278,28 @@ jobs:
         with:
           payload: |
             {
-              "text": "Product Owner Dashboard - ${{ github.repository }}",
+              "text": "Product Owner Dashboard: ${{ steps.dashboard.outputs.needs_review_count }} need review, ${{ steps.dashboard.outputs.assignments_count }} assignments",
               "blocks": [
                 {
                   "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "Product Owner Dashboard"
-                  }
+                  "text": { "type": "plain_text", "text": "Product Owner Dashboard" }
                 },
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "@${{ inputs.assignee_username }} - Daily Summary\n\n*${{ steps.dashboard.outputs.needs_review_count }}* items need review\n*${{ steps.dashboard.outputs.assignments_count }}* open assignments"
+                    "text": "*${{ steps.dashboard.outputs.needs_review_count }}* items need review across *${{ inputs.target_repos }}*\n*${{ steps.dashboard.outputs.assignments_count }}* open assignments for @${{ inputs.assignee_username }}"
                   }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": { "type": "plain_text", "text": "View Full Report" },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
                 }
               ]
             }
