@@ -88,7 +88,7 @@ jobs:
 
             # Merge immediately and delete the branch to keep things clean for the next 5-min run
             gh pr review "$PR_URL" --approve
-            gh pr merge "$PR_URL" -auto --squash --delete-branch
+            gh pr merge "$PR_URL" --auto --squash --delete-branch
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
