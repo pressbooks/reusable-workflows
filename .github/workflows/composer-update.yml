@@ -5,12 +5,17 @@ on:
     inputs:
       packages:
         type: string
-        description: "List of space seperated packages to be update. The packages can include a specific reference (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)"
+        description: "List of space separated packages (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)"
   workflow_dispatch:
     inputs:
       packages:
         type: string
-        description: "List of space seperated packages to be update. The packages can include a specific reference (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)"
+        description: "List of space separated packages (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)"
+
+concurrency:
+  group: composer-update-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -35,16 +40,17 @@ jobs:
         run: |
           git config --global user.email "ops@pressbooks.com"
           git config --global user.name "pressbooks-ops"
-          git checkout -b "${GITHUB_REF_NAME}-updated"
+          # -B resets the local branch to the current dev HEAD
+          git checkout -B "${GITHUB_REF_NAME}-updated"
       - name: Update packages
         run: |
           counter_packages_updated=0
           IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
           for package in "${packages[@]}"; do
             if [[ "$package" != *:* ]]; then
-              composer update "$package" --with-all-dependencies
+              composer update "$package" --with-all-dependencies --force
             else
-              composer require "$package" --update-with-all-dependencies --sort-packages
+              composer require "$package" --update-with-all-dependencies --sort-packages --force
             fi
             if git diff --quiet; then
               echo "No changes to commit."
@@ -55,13 +61,19 @@ jobs:
             fi
           done
           echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
-      - name: Push changes and create pull request
+      - name: Push, PR, and Merge
         run: |
           echo "COUNTER_PACKAGES_UPDATED=${COUNTER_PACKAGES_UPDATED:-0}" >> $GITHUB_ENV
           if [ "${COUNTER_PACKAGES_UPDATED:-0}" -gt 0 ]; then
-            git push -u origin "${GITHUB_REF_NAME}-updated"
-            current_date=$(date +%Y-%m-%d)
-            gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body ""
+            # -f ensures we overwrite any stale remote branch
+            git push -f origin "${GITHUB_REF_NAME}-updated"
+
+            # Create the PR
+            PR_URL=$(gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body "Automated update")
+
+            # Merge immediately and delete the branch to keep things clean for the next 5-min run
+            gh pr review "$PR_URL" --approve
+            gh pr merge "$PR_URL" -auto --squash --delete-branch
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
