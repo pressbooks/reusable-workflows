@@ -44,13 +44,16 @@ jobs:
           git checkout -B "${GITHUB_REF_NAME}-updated"
       - name: Update packages
         run: |
+          # Force Composer to overwrite any local file changes automatically
+          export COMPOSER_DISCARD_CHANGES=true
+    
           counter_packages_updated=0
           IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
           for package in "${packages[@]}"; do
             if [[ "$package" != *:* ]]; then
-              composer update "$package" --with-all-dependencies --discard-changes
+              composer update "$package" --with-all-dependencies
             else
-              composer require "$package" --update-with-all-dependencies --sort-packages --discard-changes
+              composer require "$package" --update-with-all-dependencies --sort-packages
             fi
             if git diff --quiet; then
               echo "No changes to commit."
