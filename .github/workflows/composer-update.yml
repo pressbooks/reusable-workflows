@@ -87,7 +87,7 @@ jobs:
             PR_URL=$(gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body "Automated update")
 
             # Merge immediately and delete the branch to keep things clean for the next 5-min run
-            gh pr review "$PR_URL" --approve
+            # gh pr review "$PR_URL" --approve
             gh pr merge "$PR_URL" --auto --squash --delete-branch
           fi
         env:
