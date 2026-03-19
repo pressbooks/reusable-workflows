@@ -48,9 +48,9 @@ jobs:
           IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
           for package in "${packages[@]}"; do
             if [[ "$package" != *:* ]]; then
-              composer update "$package" --with-all-dependencies --force
+              composer update "$package" --with-all-dependencies --discard-changes
             else
-              composer require "$package" --update-with-all-dependencies --sort-packages --force
+              composer require "$package" --update-with-all-dependencies --sort-packages --discard-changes
             fi
             if git diff --quiet; then
               echo "No changes to commit."
