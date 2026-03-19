@@ -23,6 +23,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Get Composer Cache Directory
+        id: composer-cache
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          # The 'key' uses a hash of your lockfile. If the lockfile changes, the cache refreshes.
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -46,7 +58,7 @@ jobs:
         run: |
           # Force Composer to overwrite any local file changes automatically
           export COMPOSER_DISCARD_CHANGES=true
-    
+
           counter_packages_updated=0
           IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
           for package in "${packages[@]}"; do
