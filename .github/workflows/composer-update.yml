@@ -12,10 +12,6 @@ on:
         type: string
         description: "List of space separated packages (ex: pressbooks/pressbooks pressbooks/pressbooks:1.0.1)"
 
-concurrency:
-  group: composer-update-${{ github.ref_name }}
-  cancel-in-progress: false
-
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -31,18 +27,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
           PACKAGIST_TOKEN: ${{ secrets.PAT_COMPOSER_UPDATE }}
-      - name: Get Composer Cache Directory
-        id: composer-cache
-        run: |
-          echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          # The 'key' uses a hash of your lockfile. If the lockfile changes, the cache refreshes.
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-composer-
       - name: Install PHP dependencies
         run: |
           export PATH="$HOME/.composer/vendor/bin:$PATH"
@@ -52,93 +36,36 @@ jobs:
         run: |
           git config --global user.email "ops@pressbooks.com"
           git config --global user.name "pressbooks-ops"
-          # -B resets the local branch to the current dev HEAD
           git checkout -B "${GITHUB_REF_NAME}-updated"
-      - name: Inspect install paths
+      - name: Update packages
         run: |
-          composer show pressbooks/pressbooks --path || true
-          [ -d vendor/pressbooks/pressbooks/.git ] && echo "vendor path is a git repo"
-          [ -d web/app/plugins/pressbooks/.git ] && echo "plugin path is a git repo"
-      - name: Test COMPOSER_DISCARD_CHANGES in vendor and app/plugins
-        run: |
-          set -euo pipefail
-
+          # Force Composer to overwrite any local file changes automatically
           export COMPOSER_DISCARD_CHANGES=true
 
-          VENDOR_FILE="vendor/pressbooks/pressbooks/README.md"
-          PLUGIN_FILE="app/plugins/pressbooks/README.md"
-          MARKER="LOCAL TEST CHANGE"
-
-          if [ -f "$VENDOR_FILE" ]; then
-            echo "$MARKER" >> "$VENDOR_FILE"
-            echo "Modified $VENDOR_FILE"
-          else
-            echo "Vendor file not found: $VENDOR_FILE"
-          fi
-
-          if [ -f "$PLUGIN_FILE" ]; then
-            echo "$MARKER" >> "$PLUGIN_FILE"
-            echo "Modified $PLUGIN_FILE"
-          else
-            echo "Plugin file not found: $PLUGIN_FILE"
-          fi
-
-          composer update pressbooks/pressbooks --with-all-dependencies
-
-          echo "Checking whether changes were discarded..."
-
-          if [ -f "$VENDOR_FILE" ]; then
-            if grep -q "$MARKER" "$VENDOR_FILE"; then
-              echo "FAIL: change still present in $VENDOR_FILE"
-              exit 1
+          counter_packages_updated=0
+          IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
+          for package in "${packages[@]}"; do
+            if [[ "$package" != *:* ]]; then
+              composer update "$package" --with-all-dependencies
             else
-              echo "PASS: change removed from $VENDOR_FILE"
+              composer require "$package" --update-with-all-dependencies --sort-packages
             fi
-          fi
-
-          if [ -f "$PLUGIN_FILE" ]; then
-            if grep -q "$MARKER" "$PLUGIN_FILE"; then
-              echo "FAIL: change still present in $PLUGIN_FILE"
-              exit 1
+            if git diff --quiet; then
+              echo "No changes to commit."
             else
-              echo "PASS: change removed from $PLUGIN_FILE"
+              git add composer.*
+              git commit -m "Chore: upgrading $package"
+              counter_packages_updated=$((counter_packages_updated + 1))
             fi
+          done
+          echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
+      - name: Push, PR, and Merge
+        run: |
+          echo "COUNTER_PACKAGES_UPDATED=${COUNTER_PACKAGES_UPDATED:-0}" >> $GITHUB_ENV
+          if [ "${COUNTER_PACKAGES_UPDATED:-0}" -gt 0 ]; then
+            git push -f origin "${GITHUB_REF_NAME}-updated"
+            PR_URL=$(gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body "Automated update")
+            gh pr merge "$PR_URL" --auto --squash --delete-branch
           fi
-      # - name: Update packages
-      #   run: |
-      #     # Force Composer to overwrite any local file changes automatically
-      #     export COMPOSER_DISCARD_CHANGES=true
-      #
-      #     counter_packages_updated=0
-      #     IFS=' ' read -r -a packages <<< "${{ github.event.inputs.packages }}"
-      #     for package in "${packages[@]}"; do
-      #       if [[ "$package" != *:* ]]; then
-      #         composer update "$package" --with-all-dependencies
-      #       else
-      #         composer require "$package" --update-with-all-dependencies --sort-packages
-      #       fi
-      #       if git diff --quiet; then
-      #         echo "No changes to commit."
-      #       else
-      #         git add composer.*
-      #         git commit -m "Chore: upgrading $package"
-      #         counter_packages_updated=$((counter_packages_updated + 1))
-      #       fi
-      #     done
-      #     echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
-      # - name: Push, PR, and Merge
-      #   run: |
-      #     echo "COUNTER_PACKAGES_UPDATED=${COUNTER_PACKAGES_UPDATED:-0}" >> $GITHUB_ENV
-      #     if [ "${COUNTER_PACKAGES_UPDATED:-0}" -gt 0 ]; then
-      #       # -f ensures we overwrite any stale remote branch
-      #       git push -f origin "${GITHUB_REF_NAME}-updated"
-      #
-      #       # Create the PR
-      #       PR_URL=$(gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body "Automated update")
-      #
-      #       # Merge immediately and delete the branch to keep things clean for the next 5-min run
-      #       # gh pr review "$PR_URL" --approve
-      #       gh pr merge "$PR_URL" --auto --squash --delete-branch
-      #     fi
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
