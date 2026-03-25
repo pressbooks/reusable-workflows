@@ -65,7 +65,7 @@ jobs:
           if [ "${COUNTER_PACKAGES_UPDATED:-0}" -gt 0 ]; then
             git push -f origin "${GITHUB_REF_NAME}-updated"
             PR_URL=$(gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body "Automated update")
-            gh pr merge "$PR_URL" --auto --squash --delete-branch
+            # gh pr merge "$PR_URL" --auto --squash --delete-branch
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
