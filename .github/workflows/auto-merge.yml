@@ -5,7 +5,7 @@ on:
       pr_title_pattern:
         required: false
         type: string
-        default: '^(chore(l10n|i18n)?: update languages)|^chore: Composer update with) '
+        default: '^(chore(l10n|i18n)?: update languages)|^chore: Composer update with)'
 
 jobs:
   workflow:
