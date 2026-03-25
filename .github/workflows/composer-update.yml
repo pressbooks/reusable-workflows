@@ -59,13 +59,13 @@ jobs:
             fi
           done
           echo "COUNTER_PACKAGES_UPDATED=$counter_packages_updated" >> $GITHUB_ENV
-      - name: Push, PR, and Merge
+      - name: Push changes and create pull request
         run: |
           echo "COUNTER_PACKAGES_UPDATED=${COUNTER_PACKAGES_UPDATED:-0}" >> $GITHUB_ENV
           if [ "${COUNTER_PACKAGES_UPDATED:-0}" -gt 0 ]; then
-            git push -f origin "${GITHUB_REF_NAME}-updated"
-            PR_URL=$(gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body "Automated update")
-            # gh pr merge "$PR_URL" --auto --squash --delete-branch
+            git push -u origin "${GITHUB_REF_NAME}-updated"
+            current_date=$(date +%Y-%m-%d)
+            gh pr create --base "${GITHUB_REF_NAME}" --head "${GITHUB_REF_NAME}"-updated --title "chore: Composer update with $COUNTER_PACKAGES_UPDATED changes" --body ""
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
