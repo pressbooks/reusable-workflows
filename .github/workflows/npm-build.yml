@@ -13,6 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0 # Necessary to fetch all history for branch and tags
 
       - name: Setup node

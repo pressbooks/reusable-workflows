@@ -57,6 +57,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
 
       - name: Install OS dependencies
         run: |
@@ -95,8 +97,11 @@ jobs:
 
       - name: Install PHP dependencies
         env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{secrets.PAT_FOR_GITHUB_ACTIONS}}"} }'
+          GH_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
         run: |
+          if [ -n "$GH_TOKEN" ]; then
+            export COMPOSER_AUTH="{\"github-oauth\": {\"github.com\": \"$GH_TOKEN\"}}"
+          fi
           export PATH="$HOME/.composer/vendor/bin:$PATH"
           composer install --no-interaction --prefer-dist
           echo "REPO_NAME=$(basename $(pwd))" >> $GITHUB_ENV
@@ -113,8 +118,14 @@ jobs:
 
       - name: Require Private Repo
         if: inputs.requires_private_repo != ''
+        env:
+          GH_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
         run: |
-          git clone --depth=1 --single-branch https://x-access-token:${{secrets.PAT_FOR_GITHUB_ACTIONS}}@github.com/pressbooks/${{ inputs.requires_private_repo }}.git ../${{ inputs.requires_private_repo }}
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::PAT_FOR_GITHUB_ACTIONS secret is required to clone private repo '${{ inputs.requires_private_repo }}' but is not available (fork PRs do not have access to secrets)"
+            exit 1
+          fi
+          git clone --depth=1 --single-branch https://x-access-token:${GH_TOKEN}@github.com/pressbooks/${{ inputs.requires_private_repo }}.git ../${{ inputs.requires_private_repo }}
           cd ../${{ inputs.requires_private_repo }} && composer install --no-dev --prefer-dist
           cd ../$REPO_NAME
 
