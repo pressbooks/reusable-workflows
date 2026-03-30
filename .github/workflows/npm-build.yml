@@ -14,7 +14,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # Necessary to fetch all history for branch and tags
-          ref: ${{ github.head_ref }} # Checkout the head of the PR
 
       - name: Setup node
         uses: actions/setup-node@v6
