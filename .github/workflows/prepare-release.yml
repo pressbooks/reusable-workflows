@@ -32,10 +32,7 @@ jobs:
           export COMPOSER_MEMORY_LIMIT=-1
           export GITHUB_BUILD_PATH=${{ github.workspace }}
           echo "File to be created : $GITHUB_BUILD_PATH/$GITHUB_REPO_SLUG-$GITHUB_TAG.zip"
-          curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
-          chmod +x wp-cli.phar
-          mv wp-cli.phar /usr/local/bin/wp
-          wp package install wp-cli/dist-archive-command
+          composer global require wp-cli/wp-cli-bundle wp-cli/dist-archive-command
           npm install
           npm run build --if-present
           composer install --no-dev --optimize-autoloader
