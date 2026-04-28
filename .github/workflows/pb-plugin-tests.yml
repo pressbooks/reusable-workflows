@@ -134,10 +134,14 @@ jobs:
 
       - name: Run PHP Tests
         if: matrix.experimental == true
+        env:
+          X_PB_CI_TOKEN: ${{ secrets.X_PB_CI_TOKEN }}
         run: composer test
 
       - name: Run PHP Tests and PCOV
         if: matrix.experimental == false && inputs.code_coverage == true
+        env:
+          X_PB_CI_TOKEN: ${{ secrets.X_PB_CI_TOKEN }}
         run: composer test-coverage
 
       - name: Upload Coverage to Codecov
