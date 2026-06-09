@@ -1,6 +1,11 @@
 name: Build npm ⚙️
 
-on: workflow_call
+on:
+  workflow_call:
+    secrets:
+      PAT_FOR_GITHUB_ACTIONS:
+        description: "Personal Access Token for pushing built assets (required for PR builds)"
+        required: false
 
 jobs:
   build-and-commit:
@@ -14,16 +19,51 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
-          fetch-depth: 0 # Necessary to fetch all history for branch and tags
+          fetch-depth: 0
+          token: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
+
+      - name: Check if build is needed
+        id: check
+        if: github.head_ref != ''
+        run: |
+          if git log -1 --pretty=format:"%s" | grep -q "^chore: build assets$"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping build — assets already committed by CI"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup node
+        if: steps.check.outputs.skip != 'true'
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
           cache: 'npm'
 
       - name: Install dependencies
+        if: steps.check.outputs.skip != 'true'
         run: npm ci
 
       - name: Lint
+        if: steps.check.outputs.skip != 'true'
         run: npm run test --if-present
+
+      - name: Build assets
+        if: steps.check.outputs.skip != 'true'
+        run: npm run build --if-present
+
+      - name: Configure Git
+        if: steps.check.outputs.skip != 'true' && github.head_ref != ''
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Commit and push built assets
+        if: steps.check.outputs.skip != 'true' && github.head_ref != ''
+        run: |
+          git checkout -B build-assets
+          git add -A -f -- assets/dist/
+          git diff --staged --quiet || {
+            git commit -m "chore: build assets"
+            git push origin build-assets:${{ github.head_ref }}
+          }
