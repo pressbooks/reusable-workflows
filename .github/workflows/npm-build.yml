@@ -43,6 +43,6 @@ jobs:
           git checkout -B build-assets
           git add -A -f -- assets/dist/
           git diff --staged --quiet || {
-            git commit -m "chore: build assets [skip ci]"
+            git commit -m "chore: build assets"
             git push origin build-assets:${{ github.head_ref }}
           }
