@@ -27,3 +27,22 @@ jobs:
 
       - name: Lint
         run: npm run test --if-present
+
+      - name: Build assets
+        run: npm run build --if-present
+
+      - name: Configure Git
+        if: github.head_ref != ''
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Commit and push built assets
+        if: github.head_ref != ''
+        run: |
+          git checkout -B build-assets
+          git add -A
+          git diff --staged --quiet || {
+            git commit -m "chore: build assets [skip ci]"
+            git push origin build-assets:${{ github.head_ref }}
+          }
