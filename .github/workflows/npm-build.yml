@@ -41,7 +41,7 @@ jobs:
         if: github.head_ref != ''
         run: |
           git checkout -B build-assets
-          git add -A
+          git add -A -f -- assets/dist/
           git diff --staged --quiet || {
             git commit -m "chore: build assets [skip ci]"
             git push origin build-assets:${{ github.head_ref }}
