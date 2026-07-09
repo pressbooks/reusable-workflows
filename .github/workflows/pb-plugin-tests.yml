@@ -132,6 +132,23 @@ jobs:
       - name: Install WP tests
         run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 ${{ matrix.wordpress }}
 
+      - name: Link Pressbooks into plugins dir
+        if: inputs.requires_pressbooks == true
+        run: |
+          # Symlink the full Pressbooks checkout (including committed assets/dist)
+          # into WP_PLUGIN_DIR so boot-time hooks that read the Vite manifest
+          # (e.g. register_duet_date_picker) don't fatal. A symlink preserves the
+          # whole tree, unlike a selective copy which can drop build artifacts.
+          WP_CORE_DIR="${WP_CORE_DIR:-/tmp/wordpress}"
+          PLUGINS_DIR="${WP_CORE_DIR%/}/wp-content/plugins"
+          PRESSBOOKS_SRC="$(cd ../pressbooks && pwd)"
+          mkdir -p "$PLUGINS_DIR"
+          rm -rf "$PLUGINS_DIR/pressbooks"
+          ln -sfn "$PRESSBOOKS_SRC" "$PLUGINS_DIR/pressbooks"
+          # Fail loud here if the built manifest didn't come across, instead of
+          # as a wp_die() deep inside the test bootstrap.
+          ls -la "$PLUGINS_DIR/pressbooks/assets/dist/manifest.json"
+
       - name: Run PHP Tests
         if: matrix.experimental == true
         env:
