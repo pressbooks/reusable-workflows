@@ -48,7 +48,7 @@ jobs:
             wordpress: latest
             experimental: true
           - php: 8.4
-            wordpress: 6.9.4
+            wordpress: 6.9.5
             experimental: true
 
     name: PHP ${{ matrix.php }} - WP ${{ matrix.wordpress }} - ${{ (inputs.use_mariadb) && 'MariaDB' || 'MySQL' }}
