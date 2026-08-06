@@ -9,10 +9,15 @@ on:
         required: false
         default: false
       requires_pressbooks:
-        description: "Require Pressbooks"
+        description: "Require Pressbooks (equivalent to hosts: '[\"pressbooks\"]')"
         type: boolean
         required: false
         default: false
+      hosts:
+        description: "JSON array of host plugin repos to run the suite against, e.g. '[\"pressbooks\", \"pressbooks-microcredentials\"]'. One job per host; PB_TEST_HOST is exported to the tests. Takes precedence over requires_pressbooks."
+        type: string
+        required: false
+        default: "[]"
       requires_private_repo:
         description: "Require private repo"
         type: string
@@ -40,19 +45,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - php: 8.3
-            wordpress: 6.9.5
+        # `hosts` wins when provided; `requires_pressbooks: true` maps to '["pressbooks"]';
+        # otherwise a single empty-string host means "no host plugin".
+        host: ${{ fromJSON(inputs.hosts != '[]' && inputs.hosts || (inputs.requires_pressbooks == true && '["pressbooks"]' || '[""]')) }}
+        # PHP/WP combos live in one axis of objects (not `include`) so they cross
+        # cleanly with the `host` axis.
+        config:
+          - php: "8.3"
+            wordpress: "6.9.5"
             experimental: false
-          - php: 8.3
-            wordpress: latest
+          - php: "8.3"
+            wordpress: "latest"
             experimental: true
-          - php: 8.4
-            wordpress: 6.9.5
+          - php: "8.4"
+            wordpress: "6.9.5"
             experimental: true
 
-    name: PHP ${{ matrix.php }} - WP ${{ matrix.wordpress }} - ${{ (inputs.use_mariadb) && 'MariaDB' || 'MySQL' }}
-    continue-on-error: ${{ matrix.experimental == true }}
+    name: PHP ${{ matrix.config.php }} - WP ${{ matrix.config.wordpress }}${{ matrix.host != '' && format(' - {0}', matrix.host) || '' }} - ${{ (inputs.use_mariadb) && 'MariaDB' || 'MySQL' }}
+    continue-on-error: ${{ matrix.config.experimental == true }}
 
     steps:
       - name: Checkout code
@@ -69,7 +79,7 @@ jobs:
       - name: Setup PHP and extensions
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ matrix.php }}
+          php-version: ${{ matrix.config.php }}
           tools: composer
           coverage: pcov
           extensions: imagick
@@ -84,16 +94,16 @@ jobs:
           path: |
             ${{ steps.composer-cache.outputs.dir }}
             vendor
-          key: ${{ runner.os }}-composer-${{ matrix.php }}-${{ hashFiles('**/composer.json', '**/composer.lock') }}
+          key: ${{ runner.os }}-composer-${{ matrix.config.php }}-${{ hashFiles('**/composer.json', '**/composer.lock') }}
           restore-keys: |
-            ${{ runner.os }}-composer-${{ matrix.php }}-
+            ${{ runner.os }}-composer-${{ matrix.config.php }}-
             ${{ runner.os }}-composer-
 
       - name: Cache WordPress test suite
         uses: actions/cache@v5
         with:
           path: /tmp/wordpress-tests-lib
-          key: ${{ runner.os }}-wordpress-${{ matrix.wordpress }}-${{ hashFiles('bin/install-wp-tests.sh') }}
+          key: ${{ runner.os }}-wordpress-${{ matrix.config.wordpress }}-${{ hashFiles('bin/install-wp-tests.sh') }}
 
       - name: Install PHP dependencies
         env:
@@ -109,12 +119,26 @@ jobs:
       - name: Check Standards
         run: composer standards
 
-      - name: Require Pressbooks
-        if: inputs.requires_pressbooks == true
+      - name: Install host plugin
+        if: matrix.host != ''
+        env:
+          GH_TOKEN: ${{ secrets.PAT_FOR_GITHUB_ACTIONS }}
         run: |
-          git clone --depth=1 --single-branch https://github.com/pressbooks/pressbooks.git ../pressbooks
-          cd ../pressbooks && composer install --no-dev --prefer-dist
-          cd ../$REPO_NAME
+          HOST="${{ matrix.host }}"
+          if [ -n "$GH_TOKEN" ]; then
+            CLONE_URL="https://x-access-token:${GH_TOKEN}@github.com/pressbooks/${HOST}.git"
+            export COMPOSER_AUTH="{\"github-oauth\": {\"github.com\": \"$GH_TOKEN\"}}"
+          else
+            CLONE_URL="https://github.com/pressbooks/${HOST}.git"
+          fi
+          if ! git clone --depth=1 --single-branch "$CLONE_URL" "../${HOST}"; then
+            echo "::error::Failed to clone pressbooks/${HOST}. If the repo is private, PAT_FOR_GITHUB_ACTIONS is required (fork PRs do not have access to secrets)."
+            exit 1
+          fi
+          # Host plugins must be installed --no-dev: a dev install ships its own
+          # PHPUnit tree, which would shadow the plugin-under-test's PHPUnit when
+          # the host's autoloader is registered.
+          cd "../${HOST}" && composer install --no-dev --prefer-dist
 
       - name: Require Private Repo
         if: inputs.requires_private_repo != ''
@@ -130,39 +154,24 @@ jobs:
           cd ../$REPO_NAME
 
       - name: Install WP tests
-        run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 ${{ matrix.wordpress }}
-
-      - name: Link Pressbooks into plugins dir
-        if: inputs.requires_pressbooks == true
-        run: |
-          # Symlink the full Pressbooks checkout (including committed assets/dist)
-          # into WP_PLUGIN_DIR so boot-time hooks that read the Vite manifest
-          # (e.g. register_duet_date_picker) don't fatal. A symlink preserves the
-          # whole tree, unlike a selective copy which can drop build artifacts.
-          WP_CORE_DIR="${WP_CORE_DIR:-/tmp/wordpress}"
-          PLUGINS_DIR="${WP_CORE_DIR%/}/wp-content/plugins"
-          PRESSBOOKS_SRC="$(cd ../pressbooks && pwd)"
-          mkdir -p "$PLUGINS_DIR"
-          rm -rf "$PLUGINS_DIR/pressbooks"
-          ln -sfn "$PRESSBOOKS_SRC" "$PLUGINS_DIR/pressbooks"
-          # Fail loud here if the built manifest didn't come across, instead of
-          # as a wp_die() deep inside the test bootstrap.
-          ls -la "$PLUGINS_DIR/pressbooks/assets/dist/manifest.json"
+        run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 ${{ matrix.config.wordpress }}
 
       - name: Run PHP Tests
-        if: matrix.experimental == true
+        if: matrix.config.experimental == true
         env:
           X_PB_CI_TOKEN: ${{ secrets.X_PB_CI_TOKEN }}
+          PB_TEST_HOST: ${{ matrix.host }}
         run: composer test
 
       - name: Run PHP Tests and PCOV
-        if: matrix.experimental == false && inputs.code_coverage == true
+        if: matrix.config.experimental == false && inputs.code_coverage == true
         env:
           X_PB_CI_TOKEN: ${{ secrets.X_PB_CI_TOKEN }}
+          PB_TEST_HOST: ${{ matrix.host }}
         run: composer test-coverage
 
       - name: Upload Coverage to Codecov
-        if: matrix.experimental == false && inputs.code_coverage == true
+        if: matrix.config.experimental == false && inputs.code_coverage == true
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_SECRET }}

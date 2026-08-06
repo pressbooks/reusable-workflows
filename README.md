@@ -40,6 +40,20 @@ This reusable workflow would run the `composer update` when a dependency within 
 
 This reusable workflow would run the desired test matrix for a plugin repository.
 
+For plugins that run on a host plugin, pass the `hosts` input — a JSON array of host repo names. The workflow clones each host from the `pressbooks` org (using `PAT_FOR_GITHUB_ACTIONS` when available, so private hosts work), installs it `--no-dev`, and runs the full test matrix once per host with `PB_TEST_HOST=<host>` exported to the tests. Dual-host plugins (e.g. `pressbooks-lti`, which runs on both `pressbooks` and `pressbooks-microcredentials`) use this to verify every change against both ecosystems:
+
+```yaml
+jobs:
+  plugin-tests:
+    uses: pressbooks/reusable-workflows/.github/workflows/pb-plugin-tests.yml@main
+    secrets: inherit
+    with:
+      hosts: '["pressbooks", "pressbooks-microcredentials"]'
+      use_mariadb: true
+```
+
+`requires_pressbooks: true` is kept for backward compatibility and is equivalent to `hosts: '["pressbooks"]'`; `hosts` takes precedence when both are set.
+
 * crowdin.yml
 
 This reusable workflow syncs translations with Crowdin. It supports three actions: `upload` (push source POT files), `download` (pull translations, compile MO files, and create a PR), and `seed` (one-time upload of both sources and existing translations to bootstrap a Crowdin project). Supports both open-source and private projects via a `project_type` input. Each repo uses its own Crowdin branch name for isolation.
