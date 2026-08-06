@@ -40,7 +40,7 @@ This reusable workflow would run the `composer update` when a dependency within 
 
 This reusable workflow would run the desired test matrix for a plugin repository.
 
-For plugins that run on a host plugin, pass the `hosts` input — a JSON array of host repo names. The workflow clones each host from the `pressbooks` org (using `PAT_FOR_GITHUB_ACTIONS` when available, so private hosts work), installs it `--no-dev`, symlinks it into the WP plugins dir, and runs the full test matrix once per host with `PB_TEST_HOST=<host>` exported to the tests. Dual-host plugins (e.g. `pressbooks-lti`, which runs on both `pressbooks` and `pressbooks-microcredentials`) use this to verify every change against both ecosystems:
+For plugins that run on a host plugin, pass the `hosts` input — a JSON array of host repo names. The workflow clones each host from the `pressbooks` org (using `PAT_FOR_GITHUB_ACTIONS` when available, so private hosts work), installs it `--no-dev`, and runs the full test matrix once per host with `PB_TEST_HOST=<host>` exported to the tests. Dual-host plugins (e.g. `pressbooks-lti`, which runs on both `pressbooks` and `pressbooks-microcredentials`) use this to verify every change against both ecosystems:
 
 ```yaml
 jobs:

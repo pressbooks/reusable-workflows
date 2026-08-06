@@ -156,23 +156,6 @@ jobs:
       - name: Install WP tests
         run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 ${{ matrix.config.wordpress }}
 
-      - name: Link host plugin into plugins dir
-        if: matrix.host != ''
-        run: |
-          # Symlink the full host checkout (including committed assets/dist)
-          # into WP_PLUGIN_DIR so boot-time hooks that read the Vite manifest
-          # (e.g. register_duet_date_picker) don't fatal. A symlink preserves the
-          # whole tree, unlike a selective copy which can drop build artifacts.
-          WP_CORE_DIR="${WP_CORE_DIR:-/tmp/wordpress}"
-          PLUGINS_DIR="${WP_CORE_DIR%/}/wp-content/plugins"
-          HOST_SRC="$(cd ../${{ matrix.host }} && pwd)"
-          mkdir -p "$PLUGINS_DIR"
-          rm -rf "$PLUGINS_DIR/${{ matrix.host }}"
-          ln -sfn "$HOST_SRC" "$PLUGINS_DIR/${{ matrix.host }}"
-          # Fail loud here if the built manifest didn't come across, instead of
-          # as a wp_die() deep inside the test bootstrap.
-          ls -la "$PLUGINS_DIR/${{ matrix.host }}/assets/dist/manifest.json"
-
       - name: Run PHP Tests
         if: matrix.config.experimental == true
         env:
