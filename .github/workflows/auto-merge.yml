@@ -96,7 +96,11 @@ jobs:
                       repo: context.payload.repository.name,
                       ref: `heads/${context.payload.pull_request.head.ref}`
                     }).catch(() => {
-                      // Branch already deleted or doesn't exist, ignore
+                      console.log(
+                        `Could not explicitly delete ${context.payload.pull_request.head.ref}:`,
+                        error.status,
+                        error.message
+                      );
                     })
                   })
                 }
