@@ -89,7 +89,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
 
       - name: Cache Composer dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ${{ steps.composer-cache.outputs.dir }}
@@ -100,7 +100,7 @@ jobs:
             ${{ runner.os }}-composer-
 
       - name: Cache WordPress test suite
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /tmp/wordpress-tests-lib
           key: ${{ runner.os }}-wordpress-${{ matrix.config.wordpress }}-${{ hashFiles('bin/install-wp-tests.sh') }}
