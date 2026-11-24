@@ -13,11 +13,12 @@ jobs:
     steps:
       - name: Check Pull Request Title
         id: title-check
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_TITLE_PATTERN: ${{ inputs.pr_title_pattern }}
         run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_TITLE_PATTERN="${{ inputs.pr_title_pattern }}"
-          shouldMerge=$(echo "$PR_TITLE" | grep -Eq "$PR_TITLE_PATTERN" && echo 'true' || echo 'false')
-          echo "shouldMerge=$shouldMerge" >> $GITHUB_OUTPUT
+          shouldMerge=$(printf '%s\n' "$PR_TITLE" | grep -Eq -- "$PR_TITLE_PATTERN" && echo 'true' || echo 'false')
+          echo "shouldMerge=$shouldMerge" >> "$GITHUB_OUTPUT"
 
       - name: Wait for checks to complete
         if: steps.title-check.outputs.shouldMerge == 'true'
